@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MikroTik Script Builder - Menú Principal</title>
-    <meta name="description" content="Generador interactivo de scripts premium para MikroTik RouterOS v6 y v7. Balanceo PCC, firewall, colas simples y más.">
+    <meta name="description" content="Generador interactivo de scripts premium para MikroTik RouterOS v6 y v7. Balanceo PCC, firewall, hotspot, VLAN, backup y más.">
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,95 +21,204 @@
                 <span>RouterOS v6 & v7 Configurator</span>
             </div>
         </header>
-        
-        <main class="menu-grid">
-            <!-- PCC -->
-            <a href="pcc.html" class="menu-card" id="card-pcc">
-                <div class="card-glow"></div>
-                <div class="card-content">
-                    <span class="card-icon">⚡</span>
-                    <h3>Balanceo PCC (Múltiples WAN)</h3>
-                    <p>Distribuye el tráfico de red de forma balanceada y equitativa entre 2 y 5 líneas de Internet.</p>
-                    <span class="card-badge">Enrutamiento</span>
-                </div>
-            </a>
 
-            <!-- Failover -->
-            <a href="failover.html" class="menu-card" id="card-failover">
-                <div class="card-glow"></div>
-                <div class="card-content">
-                    <span class="card-icon">🔁</span>
-                    <h3>Failover Recursivo</h3>
-                    <p>Monitoreo inteligente de Internet real para conmutar automáticamente ante caídas del proveedor (2 a 5 WANs).</p>
-                    <span class="card-badge">Enrutamiento</span>
-                </div>
-            </a>
+        <main class="categories-wrapper">
 
-            <!-- Firewall -->
-            <a href="firewall.html" class="menu-card" id="card-firewall">
-                <div class="card-glow"></div>
-                <div class="card-content">
-                    <span class="card-icon">🛡️</span>
-                    <h3>Firewall Básico</h3>
-                    <p>Reglas esenciales de seguridad y protección para prevenir accesos no autorizados al router y a la LAN.</p>
-                    <span class="card-badge">Seguridad y NAT</span>
+            <!-- Categoría: Enrutamiento -->
+            <section class="category-section">
+                <div class="category-header">
+                    <span class="category-icon">🛣️</span>
+                    <div>
+                        <h2 class="category-title">Enrutamiento</h2>
+                        <p class="category-subtitle">Distribución y conmutación inteligente de tráfico entre múltiples WAN</p>
+                    </div>
                 </div>
-            </a>
+                <div class="menu-grid">
+                    <a href="pcc.html" class="menu-card" id="card-pcc">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">⚡</span>
+                            <h3>Balanceo PCC (Múltiples WAN)</h3>
+                            <p>Distribuye el tráfico de red de forma balanceada y equitativa entre 2 y 5 líneas de Internet.</p>
+                            <span class="card-badge">Enrutamiento</span>
+                        </div>
+                    </a>
+                    <a href="failover.html" class="menu-card" id="card-failover">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">🔁</span>
+                            <h3>Failover Recursivo</h3>
+                            <p>Monitoreo inteligente de Internet real para conmutar automáticamente ante caídas del proveedor (2 a 5 WANs).</p>
+                            <span class="card-badge">Enrutamiento</span>
+                        </div>
+                    </a>
+                </div>
+            </section>
 
-            <!-- Port Forward -->
-            <a href="port-forward.html" class="menu-card" id="card-port-forward">
-                <div class="card-glow"></div>
-                <div class="card-content">
-                    <span class="card-icon">🔌</span>
-                    <h3>Redirección de Puertos</h3>
-                    <p>Redirecciona tráfico externo (DST-NAT) hacia servidores, cámaras o equipos locales dentro de la LAN.</p>
-                    <span class="card-badge">Seguridad y NAT</span>
+            <!-- Categoría: Red Local -->
+            <section class="category-section">
+                <div class="category-header">
+                    <span class="category-icon">🏠</span>
+                    <div>
+                        <h2 class="category-title">Red Local</h2>
+                        <p class="category-subtitle">Servicios base y segmentación de la LAN</p>
+                    </div>
                 </div>
-            </a>
+                <div class="menu-grid">
+                    <a href="dhcp.html" class="menu-card" id="card-dhcp">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">📡</span>
+                            <h3>Servidor DHCP + Reservas</h3>
+                            <p>Servidor DHCP con pool, gateway, DNS y bindings MAC→IP para asignar IPs fijas por dirección física.</p>
+                            <span class="card-badge">Red Local</span>
+                        </div>
+                    </a>
+                    <a href="vlan-bridge.html" class="menu-card" id="card-vlan-bridge">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">🌉</span>
+                            <h3>VLAN sobre Bridge (v7)</h3>
+                            <p>Segmentación profesional con bridge vlan-filtering. Oficina, invitados, IoT con interfaces dedicadas.</p>
+                            <span class="card-badge">Red Local</span>
+                        </div>
+                    </a>
+                </div>
+            </section>
 
-            <!-- Simple Queue -->
-            <a href="simple-queue.html" class="menu-card" id="card-queues">
-                <div class="card-glow"></div>
-                <div class="card-content">
-                    <span class="card-icon">📊</span>
-                    <h3>Colas Simples (Queues)</h3>
-                    <p>Limita y garantiza el ancho de banda (velocidades de subida y bajada) de IPs o subredes de tu red local.</p>
-                    <span class="card-badge">Control de Tráfico</span>
+            <!-- Categoría: Seguridad y NAT -->
+            <section class="category-section">
+                <div class="category-header">
+                    <span class="category-icon">🛡️</span>
+                    <div>
+                        <h2 class="category-title">Seguridad y NAT</h2>
+                        <p class="category-subtitle">Protección del router, firewall y redirección de puertos</p>
+                    </div>
                 </div>
-            </a>
+                <div class="menu-grid">
+                    <a href="firewall.html" class="menu-card" id="card-firewall">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">🛡️</span>
+                            <h3>Firewall Básico</h3>
+                            <p>Reglas esenciales de seguridad y protección para prevenir accesos no autorizados al router y a la LAN.</p>
+                            <span class="card-badge">Seguridad y NAT</span>
+                        </div>
+                    </a>
+                    <a href="port-forward.html" class="menu-card" id="card-port-forward">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">🔌</span>
+                            <h3>Redirección de Puertos</h3>
+                            <p>Redirecciona tráfico externo (DST-NAT) hacia servidores, cámaras o equipos locales dentro de la LAN.</p>
+                            <span class="card-badge">Seguridad y NAT</span>
+                        </div>
+                    </a>
+                    <a href="hairpin-nat.html" class="menu-card" id="card-hairpin-nat">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">🪞</span>
+                            <h3>Hairpin NAT (Loopback)</h3>
+                            <p>Acceder a servicios internos desde la propia LAN usando la IP pública. Soluciona el clásico problema de port forward interno.</p>
+                            <span class="card-badge">Seguridad y NAT</span>
+                        </div>
+                    </a>
+                </div>
+            </section>
 
-            <!-- WireGuard -->
-            <a href="wireguard.html" class="menu-card" id="card-wireguard">
-                <div class="card-glow"></div>
-                <div class="card-content">
-                    <span class="card-icon">🔒</span>
-                    <h3>VPN WireGuard (v7)</h3>
-                    <p>Configura un servidor VPN WireGuard moderno, rápido y seguro en tu router (disponible en RouterOS v7).</p>
-                    <span class="card-badge">Servicios y VPN</span>
+            <!-- Categoría: Control de Tráfico -->
+            <section class="category-section">
+                <div class="category-header">
+                    <span class="category-icon">📊</span>
+                    <div>
+                        <h2 class="category-title">Control de Tráfico</h2>
+                        <p class="category-subtitle">Limitación y garantía de ancho de banda</p>
+                    </div>
                 </div>
-            </a>
+                <div class="menu-grid">
+                    <a href="simple-queue.html" class="menu-card" id="card-queues">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">📊</span>
+                            <h3>Colas Simples (Queues)</h3>
+                            <p>Limita y garantiza el ancho de banda (velocidades de subida y bajada) de IPs o subredes de tu red local.</p>
+                            <span class="card-badge">Control de Tráfico</span>
+                        </div>
+                    </a>
+                </div>
+            </section>
 
-            <!-- PPPoE Server -->
-            <a href="pppoe.html" class="menu-card" id="card-pppoe">
-                <div class="card-glow"></div>
-                <div class="card-content">
-                    <span class="card-icon">🌐</span>
-                    <h3>Servidor PPPoE</h3>
-                    <p>Autentica a tus clientes de red local mediante túneles point-to-point PPPoE con control de perfiles y contraseñas.</p>
-                    <span class="card-badge">Servicios y VPN</span>
+            <!-- Categoría: Servicios y VPN -->
+            <section class="category-section">
+                <div class="category-header">
+                    <span class="category-icon">🔒</span>
+                    <div>
+                        <h2 class="category-title">Servicios y VPN</h2>
+                        <p class="category-subtitle">Túneles cifrados, autenticación y portales</p>
+                    </div>
                 </div>
-            </a>
+                <div class="menu-grid">
+                    <a href="wireguard.html" class="menu-card" id="card-wireguard">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">🔒</span>
+                            <h3>VPN WireGuard (v7)</h3>
+                            <p>Configura un servidor VPN WireGuard moderno, rápido y seguro en tu router (disponible en RouterOS v7).</p>
+                            <span class="card-badge">Servicios y VPN</span>
+                        </div>
+                    </a>
+                    <a href="pppoe.html" class="menu-card" id="card-pppoe">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">🌐</span>
+                            <h3>Servidor PPPoE</h3>
+                            <p>Autentica a tus clientes de red local mediante túneles point-to-point PPPoE con control de perfiles y contraseñas.</p>
+                            <span class="card-badge">Servicios y VPN</span>
+                        </div>
+                    </a>
+                    <a href="hotspot.html" class="menu-card" id="card-hotspot">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">📶</span>
+                            <h3>Hotspot WiFi (Portal Cautivo)</h3>
+                            <p>Portal cautivo para invitados con autenticación, perfiles de velocidad, timeouts y NAT automático.</p>
+                            <span class="card-badge">Servicios y VPN</span>
+                        </div>
+                    </a>
+                </div>
+            </section>
 
-            <!-- DNS Blacklist -->
-            <a href="dns-blacklist.html" class="menu-card" id="card-dns-blacklist">
-                <div class="card-glow"></div>
-                <div class="card-content">
-                    <span class="card-icon">🚫</span>
-                    <h3>DNS Blacklist (AdBlock)</h3>
-                    <p>Bloquea dominios de anuncios, rastreadores o sitios web específicos a nivel DNS interno redirigiéndolos a IPs nulas.</p>
-                    <span class="card-badge">Utilidades</span>
+            <!-- Categoría: Utilidades -->
+            <section class="category-section">
+                <div class="category-header">
+                    <span class="category-icon">🧰</span>
+                    <div>
+                        <h2 class="category-title">Utilidades</h2>
+                        <p class="category-subtitle">Mantenimiento, respaldo y bloqueo de contenido</p>
+                    </div>
                 </div>
-            </a>
+                <div class="menu-grid">
+                    <a href="dns-blacklist.html" class="menu-card" id="card-dns-blacklist">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">🚫</span>
+                            <h3>DNS Blacklist (AdBlock)</h3>
+                            <p>Bloquea dominios de anuncios, rastreadores o sitios web específicos a nivel DNS interno redirigiéndolos a IPs nulas.</p>
+                            <span class="card-badge">Utilidades</span>
+                        </div>
+                    </a>
+                    <a href="backup.html" class="menu-card" id="card-backup">
+                        <div class="card-glow"></div>
+                        <div class="card-content">
+                            <span class="card-icon">💾</span>
+                            <h3>Backup Automático + Email</h3>
+                            <p>Backup completo y export programado, con envío opcional por email y limpieza automática de archivos antiguos.</p>
+                            <span class="card-badge">Utilidades</span>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
         </main>
     </div>
 </body>
