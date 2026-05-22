@@ -308,27 +308,18 @@ const generators = {
         code += `# 1. Configurar rutas principales condicionadas por hosts de internet\n`;
         code += `/ip route\n`;
 
-        code += `# Rutas virtuales recursivas que comprueban conexión real\n`;
+        code += `# Rutas virtuales recursivas que comprueban conexión real (target-scope=10 por defecto)\n`;
         for (let i = 1; i <= N; i++) {
             const pingHost = inputs[`ping_host${i}`] || hostDefaults[i - 1] || "8.8.8.8";
-            code += `add gateway=${pingHost} check-gateway=ping distance=${i} target-scope=30 comment="WAN${i} Recursivo Primario"\n`;
+            code += `add dst-address=0.0.0.0/0 gateway=${pingHost} check-gateway=ping distance=${i} comment="WAN${i} Recursivo Primario"\n`;
         }
         code += `\n`;
 
-        code += `# Rutas físicas fijas para forzar el ping a los hosts de prueba por la WAN correcta\n`;
-        if (isV7) {
-            code += `# En v7, el scope debe permitir la resolución recursiva (scope=10 target-scope=11)\n`;
-            for (let i = 1; i <= N; i++) {
-                const pingHost = inputs[`ping_host${i}`] || hostDefaults[i - 1] || "8.8.8.8";
-                const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
-                code += `add dst-address=${pingHost}/32 gateway=${wanGateway} scope=10 target-scope=11 comment="Ruta de control Host ${i} por WAN ${i}"\n`;
-            }
-        } else {
-            for (let i = 1; i <= N; i++) {
-                const pingHost = inputs[`ping_host${i}`] || hostDefaults[i - 1] || "8.8.8.8";
-                const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
-                code += `add dst-address=${pingHost}/32 gateway=${wanGateway} scope=10 target-scope=10 comment="Ruta de control Host ${i} por WAN ${i}"\n`;
-            }
+        code += `# Rutas físicas fijas (scope=10) para forzar el ping a los hosts de prueba por la WAN correcta\n`;
+        for (let i = 1; i <= N; i++) {
+            const pingHost = inputs[`ping_host${i}`] || hostDefaults[i - 1] || "8.8.8.8";
+            const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
+            code += `add dst-address=${pingHost}/32 gateway=${wanGateway} scope=10 comment="Ruta de control Host ${i} por WAN ${i}"\n`;
         }
 
         code += `\n# 2. Configurar NAT Masquerade para todas las interfaces WAN\n`;
@@ -357,6 +348,9 @@ const generators = {
         code += `add chain=input action=accept protocol=icmp comment="Permitir ping (ICMP)"\n`;
         
         if (inputs.protect_winbox) {
+            code += `# ADVERTENCIA: Winbox queda expuesto a Internet. Se recomienda restringir por IP con address-list:\n`;
+            code += `# /ip firewall address-list add list=allowed-admins address=TU_IP_PUBLICA\n`;
+            code += `# Y luego usar: src-address-list=allowed-admins en la siguiente regla\n`;
             code += `add chain=input action=accept protocol=tcp dst-port=${inputs.winbox_port} comment="Permitir Winbox desde internet"\n`;
         }
         
@@ -486,7 +480,7 @@ const generators = {
 
         code += `# 3. Activar el servicio PPPoE Server en la interfaz designada (LAN)\n`;
         code += `/interface pppoe-server server\n`;
-        code += `add service-name=${inputs.service_name} interface=${inputs.pppoe_interface} max-mtu=1492 max-mru=1492 default-profile=${inputs.profile_name} one-session=yes disabled=no\n\n`;
+        code += `add service-name=${inputs.service_name} interface=${inputs.pppoe_interface} max-mtu=1492 max-mru=1492 default-profile=${inputs.profile_name} one-session-per-host=yes disabled=no\n\n`;
 
         code += `# 4. Agregar cuenta de cliente (Secrets / Usuario y Contraseña)\n`;
         code += `/ppp secret\n`;
@@ -507,17 +501,27 @@ const generators = {
         code += `# 2. Cargar entradas DNS estáticas que redirigen a IP nula\n`;
         code += `/ip dns static\n`;
 
+        const isV7Dns = version === 'v7';
         const domains = inputs.block_domains.split('\n');
         let count = 0;
         domains.forEach(domain => {
             const trimmed = domain.trim();
             if (trimmed) {
-                code += `add name="${trimmed}" address=${inputs.redirect_ip} comment="DNS-Blacklist"\n`;
+                if (isV7Dns) {
+                    // v7: type=A + match-subdomain=yes para bloquear subdominios también (ej: ads.dominio.com)
+                    code += `add type=A name="${trimmed}" address=${inputs.redirect_ip} match-subdomain=yes comment="DNS-Blacklist"\n`;
+                } else {
+                    // v6 no soporta match-subdomain; se bloquea solo coincidencia exacta
+                    code += `add name="${trimmed}" address=${inputs.redirect_ip} comment="DNS-Blacklist"\n`;
+                }
                 count++;
             }
         });
 
         code += `\n# Cantidad de dominios bloqueados estáticos: ${count}\n`;
+        if (!isV7Dns) {
+            code += `# NOTA v6: solo bloquea coincidencia exacta. Para bloquear subdominios usa regex: name="^.*\\\\.dominio\\\\.com$"\n`;
+        }
         code += `# RECOMENDACIÓN: Redirige forzadamente el tráfico DNS de tus clientes al Router:\n`;
         code += `# /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="Redirect DNS"\n`;
 
