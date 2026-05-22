@@ -770,6 +770,59 @@ input[type="checkbox"] {
     width: 100%;
 }
 
+.categories-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 48px;
+    width: 100%;
+}
+
+.category-section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.category-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+}
+
+.category-header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: 80px;
+    height: 2px;
+    background: linear-gradient(to right, var(--primary), transparent);
+    border-radius: 2px;
+}
+
+.category-icon {
+    font-size: 2rem;
+    line-height: 1;
+    filter: drop-shadow(0 0 12px var(--primary-glow));
+}
+
+.category-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+    margin: 0;
+}
+
+.category-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 2px;
+}
+
 .menu-card {
     background-color: var(--bg-card);
     border: 1px solid var(--border-color);

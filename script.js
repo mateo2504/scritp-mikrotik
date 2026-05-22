@@ -163,6 +163,107 @@ const scriptDefinitions = {
             { id: "redirect_ip", label: "IP de Bloqueo", type: "text", default: "0.0.0.0", hint: "Generalmente 0.0.0.0 o 127.0.0.1" },
             { id: "block_domains", label: "Dominios a Bloquear (Uno por línea)", type: "textarea", default: "ads.google.com\ndoubleclick.net\nfacebook.com\ntiktok.com\nadservice.google.com\nanalytics.google.com", hint: "Ingresa la lista de hostnames" }
         ]
+    },
+    dhcp: {
+        title: "Servidor DHCP + Reservas Estáticas",
+        description: "Configura un servidor DHCP completo: pool, network, gateway, DNS y bindings MAC→IP para asignar IPs fijas a dispositivos por su dirección MAC.",
+        fileName: "mikrotik_dhcp.rsc",
+        inputs: [
+            { id: "dhcp_interface", label: "Interfaz LAN/Bridge", type: "text", default: "bridge-lan", hint: "Interfaz donde escuchará el DHCP server" },
+            { id: "dhcp_network", label: "Red LAN (CIDR)", type: "text", default: "192.168.88.0/24" },
+            { id: "dhcp_gateway", label: "Gateway de la red", type: "text", default: "192.168.88.1", hint: "IP del router en la LAN" },
+            { id: "pool_start", label: "Inicio del Pool", type: "text", default: "192.168.88.10" },
+            { id: "pool_end", label: "Fin del Pool", type: "text", default: "192.168.88.254" },
+            { id: "dns_servers", label: "Servidores DNS", type: "text", default: "192.168.88.1,1.1.1.1", hint: "Separados por coma. Usa la IP del router para usar su DNS cache" },
+            { id: "lease_time", label: "Tiempo de Lease", type: "text", default: "1d", hint: "Ej: 10m, 1h, 1d, 1w" },
+            { id: "pool_name", label: "Nombre del Pool", type: "text", default: "dhcp-pool" },
+            { id: "server_name", label: "Nombre del Servidor DHCP", type: "text", default: "dhcp1" },
+            { id: "static_leases", label: "Reservas Estáticas (MAC|IP|Comentario por línea)", type: "textarea", default: "AA:BB:CC:11:22:33|192.168.88.50|Servidor NAS\nAA:BB:CC:44:55:66|192.168.88.51|Impresora", hint: "Una por línea. Deja vacío si no quieres reservas." }
+        ]
+    },
+    hotspot: {
+        title: "Hotspot WiFi (Portal Cautivo)",
+        description: "Crea un portal cautivo para invitados con autenticación por usuario y contraseña, perfiles de velocidad, timeouts y NAT automático.",
+        fileName: "mikrotik_hotspot.rsc",
+        inputs: [
+            { id: "hotspot_interface", label: "Interfaz del Hotspot", type: "text", default: "bridge-hotspot", hint: "Bridge o interfaz dedicada al hotspot" },
+            { id: "hotspot_address", label: "IP del Router en Hotspot (CIDR)", type: "text", default: "10.5.50.1/24" },
+            { id: "hotspot_network", label: "Red Hotspot (CIDR)", type: "text", default: "10.5.50.0/24" },
+            { id: "pool_start", label: "Inicio Pool IPs Clientes", type: "text", default: "10.5.50.2" },
+            { id: "pool_end", label: "Fin Pool IPs Clientes", type: "text", default: "10.5.50.254" },
+            { id: "dns_servers", label: "Servidores DNS", type: "text", default: "1.1.1.1,8.8.8.8" },
+            { id: "dns_name", label: "DNS Name del Portal", type: "text", default: "login.local", hint: "Dominio que verá el cliente en el portal" },
+            { id: "hotspot_name", label: "Nombre del Hotspot", type: "text", default: "hotspot-guest" },
+            { id: "rate_limit", label: "Límite de Velocidad por Cliente (subida/bajada)", type: "text", default: "2M/5M", hint: "Ej: 2M/5M. Vacío = sin límite" },
+            { id: "session_timeout", label: "Session Timeout", type: "text", default: "1h", hint: "Tiempo total de la sesión" },
+            { id: "idle_timeout", label: "Idle Timeout", type: "text", default: "5m", hint: "Inactividad antes de desconexión" },
+            { id: "admin_user", label: "Usuario de Prueba", type: "text", default: "invitado" },
+            { id: "admin_pass", label: "Contraseña de Prueba", type: "text", default: "wifi123" }
+        ]
+    },
+    "hairpin-nat": {
+        title: "Hairpin NAT (NAT Loopback)",
+        description: "Permite acceder a servicios internos (DST-NAT) desde la propia LAN usando la IP pública. Soluciona el problema clásico de 'no puedo acceder a mi servidor desde adentro'.",
+        fileName: "mikrotik_hairpin_nat.rsc",
+        inputs: [
+            { id: "lan_network", label: "Red LAN Origen (CIDR)", type: "text", default: "192.168.88.0/24", hint: "Subred desde donde provienen los clientes" },
+            { id: "internal_ip", label: "IP del Servidor Interno", type: "text", default: "192.168.88.10" },
+            { id: "internal_port", label: "Puerto del Servidor Interno", type: "text", default: "80" },
+            {
+                id: "protocol",
+                label: "Protocolo",
+                type: "select",
+                options: [
+                    { value: "tcp", label: "TCP" },
+                    { value: "udp", label: "UDP" }
+                ],
+                default: "tcp"
+            },
+            { id: "include_dstnat", label: "Incluir Regla DST-NAT (Port Forward)", type: "checkbox", default: true, hint: "Desactívalo si ya tienes el port forward configurado" },
+            { id: "wan_interface", label: "Interfaz WAN (si incluyes DST-NAT)", type: "text", default: "ether1" },
+            { id: "external_port", label: "Puerto Público Externo", type: "text", default: "80" },
+            { id: "comment", label: "Comentario", type: "text", default: "Web Server Hairpin" }
+        ]
+    },
+    backup: {
+        title: "Backup Automático Programado",
+        description: "Backup completo + export de configuración diario/semanal, con envío opcional por email y limpieza automática de archivos antiguos.",
+        fileName: "mikrotik_backup_auto.rsc",
+        inputs: [
+            { id: "backup_prefix", label: "Prefijo del Backup", type: "text", default: "backup", hint: "Nombre base de los archivos generados" },
+            { id: "backup_password", label: "Contraseña del Backup", type: "text", default: "MiClaveBackup", hint: "Protege el archivo .backup con esta clave" },
+            { id: "schedule_interval", label: "Intervalo", type: "select", options: [
+                { value: "1d", label: "Diario (1d)" },
+                { value: "1w", label: "Semanal (1w)" },
+                { value: "12h", label: "Cada 12 horas" },
+                { value: "6h", label: "Cada 6 horas" }
+            ], default: "1d" },
+            { id: "schedule_time", label: "Hora de Ejecución", type: "text", default: "03:00:00", hint: "Formato HH:MM:SS (hora local del router)" },
+            { id: "send_email", label: "Enviar Backup por Email", type: "checkbox", default: true },
+            { id: "email_to", label: "Email Destino", type: "text", default: "admin@ejemplo.com" },
+            { id: "email_from", label: "Email Origen (From)", type: "text", default: "router@ejemplo.com" },
+            { id: "smtp_server", label: "Servidor SMTP", type: "text", default: "smtp.gmail.com" },
+            { id: "smtp_port", label: "Puerto SMTP", type: "text", default: "587" },
+            { id: "smtp_tls", label: "Tipo de Cifrado", type: "select", options: [
+                { value: "starttls", label: "STARTTLS (587 - recomendado)" },
+                { value: "tls-only", label: "TLS Directo (465)" },
+                { value: "no", label: "Sin cifrado (25)" }
+            ], default: "starttls" },
+            { id: "smtp_user", label: "Usuario SMTP", type: "text", default: "router@gmail.com" },
+            { id: "smtp_pass", label: "Contraseña / App Password", type: "text", default: "tu_app_password", hint: "Para Gmail usa una App Password (no la contraseña normal)" }
+        ]
+    },
+    "vlan-bridge": {
+        title: "VLAN sobre Bridge (RouterOS v7+)",
+        description: "Configuración profesional de VLANs con bridge vlan-filtering. Segmenta la red en oficina, invitados, IoT, etc. con interfaces dedicadas e IP por VLAN.",
+        fileName: "mikrotik_vlan_bridge.rsc",
+        isV7Only: true,
+        inputs: [
+            { id: "bridge_name", label: "Nombre del Bridge Principal", type: "text", default: "bridge-main" },
+            { id: "trunk_ports", label: "Puertos Trunk (CON tag, separados por coma)", type: "text", default: "ether2,sfp-sfpplus1", hint: "Puertos que llevarán múltiples VLANs etiquetadas (a switches o APs CAPsMAN)" },
+            { id: "management_vlan", label: "VLAN de Management", type: "text", default: "10", hint: "VLAN usada para acceder al router (evita lockout)" },
+            { id: "vlan_list", label: "Definición de VLANs (VID|Nombre|IP/CIDR|PuertosUntagged)", type: "textarea", default: "10|management|192.168.10.1/24|ether3\n20|users|192.168.20.1/24|ether4,ether5\n30|guests|192.168.30.1/24|ether6\n40|iot|192.168.40.1/24|", hint: "Una VLAN por línea. PuertosUntagged separados por coma o vacío si solo es trunk." }
+        ]
     }
 };
 
@@ -524,6 +625,266 @@ const generators = {
         }
         code += `# RECOMENDACIÓN: Redirige forzadamente el tráfico DNS de tus clientes al Router:\n`;
         code += `# /ip firewall nat add chain=dstnat protocol=udp dst-port=53 action=redirect to-ports=53 comment="Redirect DNS"\n`;
+
+        return code;
+    },
+    dhcp: (inputs, version) => {
+        const network = inputs.dhcp_network || "192.168.88.0/24";
+        const netParts = network.split('/');
+        const netmaskBits = netParts[1] || "24";
+
+        let code = `# ====================================================\n`;
+        code += `# SCRIPT: Servidor DHCP + Reservas Estáticas\n`;
+        code += `# RouterOS Version: ${version.toUpperCase()}\n`;
+        code += `# Generado: ${new Date().toLocaleDateString()}\n`;
+        code += `# ====================================================\n\n`;
+
+        code += `# 1. Pool de direcciones para entregar a los clientes\n`;
+        code += `/ip pool\n`;
+        code += `add name=${inputs.pool_name} ranges=${inputs.pool_start}-${inputs.pool_end}\n\n`;
+
+        code += `# 2. Servidor DHCP escuchando en la interfaz LAN\n`;
+        code += `/ip dhcp-server\n`;
+        code += `add name=${inputs.server_name} interface=${inputs.dhcp_interface} address-pool=${inputs.pool_name} lease-time=${inputs.lease_time} disabled=no\n\n`;
+
+        code += `# 3. Parámetros que se entregan al cliente (gateway, DNS, máscara)\n`;
+        code += `/ip dhcp-server network\n`;
+        code += `add address=${network} gateway=${inputs.dhcp_gateway} dns-server=${inputs.dns_servers} netmask=${netmaskBits} comment="LAN DHCP Network"\n\n`;
+
+        const staticLeases = (inputs.static_leases || "").split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        if (staticLeases.length > 0) {
+            code += `# 4. Reservas estáticas (binding MAC -> IP). El dispositivo siempre recibirá la misma IP.\n`;
+            code += `/ip dhcp-server lease\n`;
+            staticLeases.forEach(line => {
+                const parts = line.split('|').map(p => p.trim());
+                if (parts.length >= 2) {
+                    const mac = parts[0];
+                    const ip = parts[1];
+                    const comment = parts[2] || "Reserva";
+                    code += `add address=${ip} mac-address=${mac} server=${inputs.server_name} comment="${comment}"\n`;
+                }
+            });
+            code += `\n`;
+        }
+
+        code += `# NOTA: Asegúrate de tener IP asignada a la interfaz ${inputs.dhcp_interface}:\n`;
+        code += `# /ip address add interface=${inputs.dhcp_interface} address=${inputs.dhcp_gateway}/${netmaskBits}\n`;
+
+        return code;
+    },
+    hotspot: (inputs, version) => {
+        const network = inputs.hotspot_network || "10.5.50.0/24";
+        const netmaskBits = (network.split('/')[1]) || "24";
+        const addressOnly = (inputs.hotspot_address || "10.5.50.1/24").split('/')[0];
+
+        let code = `# ====================================================\n`;
+        code += `# SCRIPT: Hotspot WiFi con Portal Cautivo\n`;
+        code += `# RouterOS Version: ${version.toUpperCase()}\n`;
+        code += `# Generado: ${new Date().toLocaleDateString()}\n`;
+        code += `# NOTA: La interfaz '${inputs.hotspot_interface}' debe existir previamente.\n`;
+        code += `# ====================================================\n\n`;
+
+        code += `# 1. Asignar IP del router en la red del hotspot\n`;
+        code += `/ip address\n`;
+        code += `add address=${inputs.hotspot_address} interface=${inputs.hotspot_interface} comment="Hotspot Gateway"\n\n`;
+
+        code += `# 2. Pool de IPs que se entregarán a los clientes\n`;
+        code += `/ip pool\n`;
+        code += `add name=hs-pool-${inputs.hotspot_name} ranges=${inputs.pool_start}-${inputs.pool_end}\n\n`;
+
+        code += `# 3. DHCP server dentro de la red del hotspot\n`;
+        code += `/ip dhcp-server\n`;
+        code += `add name=dhcp-${inputs.hotspot_name} interface=${inputs.hotspot_interface} address-pool=hs-pool-${inputs.hotspot_name} lease-time=${inputs.session_timeout} disabled=no\n`;
+        code += `/ip dhcp-server network\n`;
+        code += `add address=${network} gateway=${addressOnly} dns-server=${inputs.dns_servers} netmask=${netmaskBits} comment="Hotspot DHCP"\n\n`;
+
+        code += `# 4. Perfil del Hotspot (configuración global del portal)\n`;
+        code += `/ip hotspot profile\n`;
+        code += `add name=hsprof-${inputs.hotspot_name} hotspot-address=${addressOnly} dns-name=${inputs.dns_name} html-directory=hotspot login-by=http-chap,http-pap use-radius=no\n\n`;
+
+        code += `# 5. Perfil de usuario (velocidad, timeouts)\n`;
+        code += `/ip hotspot user profile\n`;
+        const rateLimitPart = inputs.rate_limit && inputs.rate_limit.trim() ? `rate-limit=${inputs.rate_limit} ` : '';
+        code += `add name=uprof-${inputs.hotspot_name} ${rateLimitPart}session-timeout=${inputs.session_timeout} idle-timeout=${inputs.idle_timeout} shared-users=1\n\n`;
+
+        code += `# 6. Activar el Hotspot sobre la interfaz\n`;
+        code += `/ip hotspot\n`;
+        code += `add name=${inputs.hotspot_name} interface=${inputs.hotspot_interface} address-pool=hs-pool-${inputs.hotspot_name} profile=hsprof-${inputs.hotspot_name} addresses-per-mac=1 disabled=no\n\n`;
+
+        code += `# 7. Crear usuario de prueba\n`;
+        code += `/ip hotspot user\n`;
+        code += `add name="${inputs.admin_user}" password="${inputs.admin_pass}" profile=uprof-${inputs.hotspot_name} comment="Usuario inicial"\n\n`;
+
+        code += `# 8. NAT para que los clientes salgan a Internet\n`;
+        code += `/ip firewall nat\n`;
+        code += `add chain=srcnat src-address=${network} action=masquerade comment="Masquerade Hotspot ${inputs.hotspot_name}"\n\n`;
+
+        code += `# 9. DNS estático para que el dns-name resuelva al router\n`;
+        code += `/ip dns static\n`;
+        code += `add name=${inputs.dns_name} address=${addressOnly} comment="Hotspot portal redirect"\n`;
+
+        return code;
+    },
+    "hairpin-nat": (inputs, version) => {
+        let code = `# ====================================================\n`;
+        code += `# SCRIPT: Hairpin NAT (NAT Loopback)\n`;
+        code += `# RouterOS Version: ${version.toUpperCase()}\n`;
+        code += `# Generado: ${new Date().toLocaleDateString()}\n`;
+        code += `# Permite acceder al servidor interno usando la IP publica desde la propia LAN\n`;
+        code += `# ====================================================\n\n`;
+
+        code += `/ip firewall nat\n`;
+
+        if (inputs.include_dstnat) {
+            code += `# 1. DST-NAT: redirecciona el puerto publico al servidor interno (Port Forward)\n`;
+            code += `add chain=dstnat protocol=${inputs.protocol} in-interface=${inputs.wan_interface} dst-port=${inputs.external_port} action=dst-nat to-addresses=${inputs.internal_ip} to-ports=${inputs.internal_port} comment="${inputs.comment} - DSTNAT"\n\n`;
+        }
+
+        code += `# 2. SRC-NAT (Hairpin): masquerade del tráfico LAN -> Servidor Interno\n`;
+        code += `# Sin esta regla, el servidor responde directo al cliente LAN y este descarta el paquete.\n`;
+        code += `add chain=srcnat src-address=${inputs.lan_network} dst-address=${inputs.internal_ip} protocol=${inputs.protocol} dst-port=${inputs.internal_port} action=masquerade comment="${inputs.comment} - Hairpin"\n\n`;
+
+        code += `# RECOMENDACIÓN: Si tienes muchos servidores con port forward, usa esta regla universal en lugar de una por cada uno:\n`;
+        code += `# add chain=srcnat src-address=${inputs.lan_network} dst-address=${inputs.lan_network} action=masquerade comment="Hairpin universal LAN-LAN via port forward"\n`;
+
+        return code;
+    },
+    backup: (inputs, version) => {
+        const scriptName = `auto-${inputs.backup_prefix || 'backup'}`;
+        const schedulerName = `sched-${inputs.backup_prefix || 'backup'}`;
+
+        let code = `# ====================================================\n`;
+        code += `# SCRIPT: Backup Automático Programado\n`;
+        code += `# RouterOS Version: ${version.toUpperCase()}\n`;
+        code += `# Generado: ${new Date().toLocaleDateString()}\n`;
+        code += `# ====================================================\n\n`;
+
+        if (inputs.send_email) {
+            code += `# 1. Configurar la cuenta SMTP para enviar los backups por correo\n`;
+            code += `/tool e-mail\n`;
+            const tlsValue = inputs.smtp_tls === 'no' ? 'no' : (inputs.smtp_tls === 'tls-only' ? 'tls-only' : 'starttls');
+            code += `set address=${inputs.smtp_server} port=${inputs.smtp_port} user="${inputs.smtp_user}" password="${inputs.smtp_pass}" tls=${tlsValue} from="${inputs.email_from}"\n\n`;
+        }
+
+        const stepNum = inputs.send_email ? 2 : 1;
+        code += `# ${stepNum}. Script que genera backup + export y opcionalmente lo envía por email\n`;
+        code += `/system script\n`;
+        code += `add name=${scriptName} policy=read,write,policy,test,sensitive source={\n`;
+        code += `    :local fname ("${inputs.backup_prefix}-" . [/system identity get name] . "-" . [:pick [/system clock get date] 7 11] . [:pick [/system clock get date] 0 3] . [:pick [/system clock get date] 4 6])\n`;
+        code += `    :log info ("Generando backup: " . $fname)\n`;
+        code += `    /system backup save name=$fname password="${inputs.backup_password}"\n`;
+        code += `    /export file=$fname\n`;
+        code += `    :delay 5s\n`;
+        if (inputs.send_email) {
+            code += `    /tool e-mail send to="${inputs.email_to}" subject=("Backup MikroTik - " . [/system identity get name]) body=("Backup y export adjuntos. Fecha: " . [/system clock get date] . " " . [/system clock get time]) file=($fname . ".backup")\n`;
+            code += `    :delay 10s\n`;
+            code += `    /tool e-mail send to="${inputs.email_to}" subject=("Export Config - " . [/system identity get name]) body="Export en texto plano adjunto" file=($fname . ".rsc")\n`;
+            code += `    :delay 30s\n`;
+            code += `    :log info ("Limpiando archivos temporales del backup: " . $fname)\n`;
+            code += `    /file remove [/file find name=($fname . ".backup")]\n`;
+            code += `    /file remove [/file find name=($fname . ".rsc")]\n`;
+        } else {
+            code += `    :log info ("Backup guardado en almacenamiento local: " . $fname)\n`;
+        }
+        code += `}\n\n`;
+
+        const stepNum2 = stepNum + 1;
+        code += `# ${stepNum2}. Programar la ejecución del script\n`;
+        code += `/system scheduler\n`;
+        code += `add name=${schedulerName} interval=${inputs.schedule_interval} start-time=${inputs.schedule_time} on-event="/system script run ${scriptName}" comment="Backup Automático"\n\n`;
+
+        if (inputs.send_email) {
+            code += `# IMPORTANTE para Gmail:\n`;
+            code += `# 1. Activa la verificación en 2 pasos en la cuenta Google.\n`;
+            code += `# 2. Genera una 'Contraseña de Aplicación' en https://myaccount.google.com/apppasswords\n`;
+            code += `# 3. Usa esa contraseña (16 caracteres) en el campo password, NO la del usuario.\n`;
+        }
+        code += `# Probar manualmente: /system script run ${scriptName}\n`;
+
+        return code;
+    },
+    "vlan-bridge": (inputs, version) => {
+        if (version === 'v6') {
+            return `# ====================================================\n# ERROR: SCRIPT OPTIMIZADO PARA RouterOS v7\n# ====================================================\n# La sintaxis de bridge vlan-filtering es estable y recomendada desde v7.\n# Por favor cambia el selector arriba a la derecha a 'v7'.\n`;
+        }
+
+        const bridge = inputs.bridge_name || "bridge-main";
+        const trunkPorts = (inputs.trunk_ports || "").split(',').map(p => p.trim()).filter(p => p.length > 0);
+        const vlanLines = (inputs.vlan_list || "").split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        const mgmtVlan = inputs.management_vlan || "10";
+
+        const vlans = vlanLines.map(line => {
+            const parts = line.split('|').map(p => p.trim());
+            return {
+                id: parts[0] || "",
+                name: parts[1] || "",
+                ip: parts[2] || "",
+                untagged: (parts[3] || "").split(',').map(p => p.trim()).filter(p => p.length > 0)
+            };
+        }).filter(v => v.id && v.name);
+
+        let code = `# ====================================================\n`;
+        code += `# SCRIPT: VLAN sobre Bridge con vlan-filtering (RouterOS v7)\n`;
+        code += `# Generado: ${new Date().toLocaleDateString()}\n`;
+        code += `# IMPORTANTE: activa vlan-filtering AL FINAL. Si configuras mal te bloquearás.\n`;
+        code += `# Conéctate por consola/MAC-Winbox antes de aplicar este script.\n`;
+        code += `# ====================================================\n\n`;
+
+        code += `# 1. Crear el bridge SIN vlan-filtering aun (se activa al final)\n`;
+        code += `/interface bridge\n`;
+        code += `add name=${bridge} vlan-filtering=no protocol-mode=rstp comment="Bridge con VLAN filtering"\n\n`;
+
+        code += `# 2. Agregar puertos al bridge\n`;
+        code += `/interface bridge port\n`;
+        trunkPorts.forEach(p => {
+            code += `add bridge=${bridge} interface=${p} comment="Trunk port"\n`;
+        });
+        vlans.forEach(v => {
+            v.untagged.forEach(p => {
+                code += `add bridge=${bridge} interface=${p} pvid=${v.id} frame-types=admit-only-untagged-and-priority-tagged comment="Access port VLAN ${v.id} (${v.name})"\n`;
+            });
+        });
+        code += `\n`;
+
+        code += `# 3. Crear las interfaces VLAN sobre el bridge\n`;
+        code += `/interface vlan\n`;
+        vlans.forEach(v => {
+            code += `add name=vlan${v.id}-${v.name} interface=${bridge} vlan-id=${v.id} comment="VLAN ${v.id} ${v.name}"\n`;
+        });
+        code += `\n`;
+
+        code += `# 4. Tabla de VLANs del bridge (qué VLAN existe en qué puerto)\n`;
+        code += `/interface bridge vlan\n`;
+        vlans.forEach(v => {
+            const taggedList = [bridge, ...trunkPorts].join(',');
+            const untaggedPart = v.untagged.length > 0 ? ` untagged=${v.untagged.join(',')}` : '';
+            code += `add bridge=${bridge} vlan-ids=${v.id} tagged=${taggedList}${untaggedPart} comment="VLAN ${v.id} ${v.name}"\n`;
+        });
+        code += `\n`;
+
+        code += `# 5. Asignar IP a cada interfaz VLAN (gateway de cada subred)\n`;
+        code += `/ip address\n`;
+        vlans.forEach(v => {
+            if (v.ip) {
+                code += `add interface=vlan${v.id}-${v.name} address=${v.ip} comment="Gateway VLAN ${v.name}"\n`;
+            }
+        });
+        code += `\n`;
+
+        const mgmtVlanDef = vlans.find(v => v.id === mgmtVlan);
+        if (mgmtVlanDef) {
+            code += `# 6. Lista de interfaces para reglas firewall (opcional pero recomendado)\n`;
+            code += `/interface list\n`;
+            code += `add name=VLAN-MGMT comment="Solo VLAN de management"\n`;
+            code += `/interface list member\n`;
+            code += `add list=VLAN-MGMT interface=vlan${mgmtVlanDef.id}-${mgmtVlanDef.name}\n\n`;
+        }
+
+        code += `# 7. ACTIVAR vlan-filtering (PUNTO DE NO RETORNO - asegúrate del management antes)\n`;
+        code += `/interface bridge set ${bridge} vlan-filtering=yes\n\n`;
+
+        code += `# SUGERENCIA: Después de probar, crea DHCP server, firewall y NAT por cada VLAN según necesites.\n`;
+        code += `# Para aislar VLANs entre sí: agrega regla en /ip firewall filter chain=forward action=drop entre subredes.\n`;
 
         return code;
     }
