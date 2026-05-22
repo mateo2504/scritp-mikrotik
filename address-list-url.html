@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bloqueo Address-List URL - MikroTik Script Builder</title>
+    <meta name="description" content="Generador de bloqueo de IPs maliciosas mediante address-list descargada desde URL (FireHOL, Spamhaus, IPsum).">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body data-script="address-list-url">
+    <div class="app-container">
+        <main class="app-main">
+            <header class="main-header">
+                <div class="header-left">
+                    <a href="index.html" class="back-btn">
+                        <span class="btn-icon">←</span> Volver al Menú
+                    </a>
+                    <div class="header-title">
+                        <h2 id="current-script-title">Bloqueo por Address-List desde URL</h2>
+                        <p id="current-script-description">Descarga y actualización automática de listas de IPs maliciosas.</p>
+                    </div>
+                </div>
+                <div class="global-controls">
+                    <div class="version-selector-container">
+                        <span class="label-text">RouterOS:</span>
+                        <div class="version-toggle">
+                            <input type="radio" name="routeros-version" id="ros-v6" value="v6">
+                            <label for="ros-v6">v6</label>
+                            <input type="radio" name="routeros-version" id="ros-v7" value="v7" checked>
+                            <label for="ros-v7">v7</label>
+                            <div class="toggle-slider"></div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="workspace-grid">
+                <section class="config-panel card">
+                    <div class="card-header">
+                        <h3>Configuración de Parámetros</h3>
+                        <span class="badge">Ajustes</span>
+                    </div>
+                    <form id="script-form" autocomplete="off" onsubmit="event.preventDefault();">
+                        <div id="dynamic-inputs"></div>
+                    </form>
+                </section>
+
+                <section class="preview-panel card">
+                    <div class="card-header code-header">
+                        <div class="file-info">
+                            <span class="file-icon">📄</span>
+                            <span class="file-name" id="script-file-name">mikrotik_blocklist_url.rsc</span>
+                        </div>
+                        <div class="action-buttons">
+                            <button id="btn-copy" class="btn btn-secondary">
+                                <span class="btn-icon">📋</span> <span class="btn-text">Copiar</span>
+                            </button>
+                            <button id="btn-download" class="btn btn-primary">
+                                <span class="btn-icon">📥</span> Descargar .rsc
+                            </button>
+                        </div>
+                    </div>
+                    <div class="code-container">
+                        <div class="code-numbers" id="code-line-numbers"></div>
+                        <pre><code id="code-output" class="language-rsc"># Cargando script...</code></pre>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
