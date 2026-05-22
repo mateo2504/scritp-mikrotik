@@ -264,6 +264,112 @@ const scriptDefinitions = {
             { id: "management_vlan", label: "VLAN de Management", type: "text", default: "10", hint: "VLAN usada para acceder al router (evita lockout)" },
             { id: "vlan_list", label: "Definición de VLANs (VID|Nombre|IP/CIDR|PuertosUntagged)", type: "textarea", default: "10|management|192.168.10.1/24|ether3\n20|users|192.168.20.1/24|ether4,ether5\n30|guests|192.168.30.1/24|ether6\n40|iot|192.168.40.1/24|", hint: "Una VLAN por línea. PuertosUntagged separados por coma o vacío si solo es trunk." }
         ]
+    },
+    "brute-force": {
+        title: "Protección Anti Brute-Force",
+        description: "Bloqueo automático de IPs que intentan acceder masivamente a SSH, Winbox, API o WWW. Usa stages de address-list para banear progresivamente tras N intentos.",
+        fileName: "mikrotik_brute_force.rsc",
+        inputs: [
+            { id: "protect_ssh", label: "Proteger SSH (puerto 22)", type: "checkbox", default: true },
+            { id: "protect_winbox", label: "Proteger Winbox (puerto 8291)", type: "checkbox", default: true },
+            { id: "protect_api", label: "Proteger API (puerto 8728/8729)", type: "checkbox", default: true },
+            { id: "protect_www", label: "Proteger WWW/Webfig (puerto 80/443)", type: "checkbox", default: false },
+            { id: "custom_ports", label: "Puertos Adicionales (opcional, coma)", type: "text", default: "", hint: "Ej: 21,23 - dejar vacío si no necesitas más" },
+            { id: "stage_timeout", label: "Timeout entre Stages", type: "text", default: "1m", hint: "Tiempo para que el atacante 'olvide' un intento (clásico: 1m)" },
+            { id: "blacklist_timeout", label: "Tiempo de Bloqueo Final", type: "text", default: "1w", hint: "Cuánto tiempo queda baneado el atacante (ej: 1d, 1w, 30d)" },
+            { id: "whitelist_ips", label: "Whitelist (IPs/Redes Confiables)", type: "textarea", default: "192.168.0.0/16\n10.0.0.0/8\n172.16.0.0/12", hint: "Una por línea. Estas IPs nunca se bloquean (LAN/oficina)." }
+        ]
+    },
+    "address-list-url": {
+        title: "Bloqueo por Address-List desde URL",
+        description: "Descarga y actualiza automáticamente listas de IPs maliciosas (Spamhaus, FireHOL, países) y bloquea conexiones desde/hacia esas IPs. Refresco programado.",
+        fileName: "mikrotik_blocklist_url.rsc",
+        inputs: [
+            {
+                id: "preset",
+                label: "Lista Preconfigurada",
+                type: "select",
+                options: [
+                    { value: "custom", label: "Personalizada (URL manual)" },
+                    { value: "firehol1", label: "FireHOL Level 1 (recomendado)" },
+                    { value: "spamhaus-drop", label: "Spamhaus DROP" },
+                    { value: "stamparm-blackbook", label: "Stamparm Blackbook (malware)" },
+                    { value: "ipsum", label: "IPsum (Threat Intel)" }
+                ],
+                default: "firehol1",
+                hint: "Selecciona una lista popular o usa una URL propia"
+            },
+            { id: "list_url", label: "URL del Blocklist", type: "text", default: "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset", hint: "Solo se modifica con preset='Personalizada'. Acepta formato .txt (una IP por línea) o .rsc" },
+            { id: "list_format", label: "Formato del Archivo", type: "select", options: [
+                { value: "txt", label: "Texto plano (una IP/CIDR por línea)" },
+                { value: "rsc", label: "Script RouterOS (.rsc)" }
+            ], default: "txt" },
+            { id: "list_name", label: "Nombre de la Address-List", type: "text", default: "blocklist-auto" },
+            { id: "block_chain", label: "Bloquear en Cadena", type: "select", options: [
+                { value: "input-forward", label: "Input + Forward (recomendado)" },
+                { value: "input", label: "Solo Input (proteger router)" },
+                { value: "forward", label: "Solo Forward (proteger LAN)" }
+            ], default: "input-forward" },
+            { id: "block_direction", label: "Dirección del Bloqueo", type: "select", options: [
+                { value: "src", label: "Origen (src-address-list)" },
+                { value: "dst", label: "Destino (dst-address-list)" },
+                { value: "both", label: "Ambos (origen y destino)" }
+            ], default: "src" },
+            { id: "update_interval", label: "Frecuencia de Actualización", type: "select", options: [
+                { value: "1d", label: "Diaria (1d)" },
+                { value: "12h", label: "Cada 12 horas" },
+                { value: "1w", label: "Semanal (1w)" }
+            ], default: "1d" },
+            { id: "update_time", label: "Hora de Actualización", type: "text", default: "04:00:00" }
+        ]
+    },
+    "port-knocking": {
+        title: "Port Knocking (Acceso Oculto)",
+        description: "Mantiene los servicios cerrados al mundo y solo los abre tras una secuencia secreta de 'toques' en puertos específicos. Acceso 'invisible' a Winbox/SSH.",
+        fileName: "mikrotik_port_knocking.rsc",
+        inputs: [
+            { id: "knock_port_1", label: "Puerto Secreto 1", type: "text", default: "7654", hint: "Primer 'toque' de la secuencia" },
+            { id: "knock_port_2", label: "Puerto Secreto 2", type: "text", default: "8765", hint: "Segundo toque (después del primero)" },
+            { id: "knock_port_3", label: "Puerto Secreto 3", type: "text", default: "9876", hint: "Tercer toque (cierra la secuencia)" },
+            {
+                id: "knock_protocol",
+                label: "Protocolo de los Knocks",
+                type: "select",
+                options: [
+                    { value: "tcp", label: "TCP" },
+                    { value: "udp", label: "UDP" }
+                ],
+                default: "tcp"
+            },
+            { id: "target_ports", label: "Puertos del Servicio a Proteger", type: "text", default: "22,8291", hint: "Puertos que se abren al autorizar (SSH, Winbox, etc.)" },
+            { id: "stage_timeout", label: "Timeout entre Toques", type: "text", default: "10s", hint: "Tiempo máximo entre puertos de la secuencia" },
+            { id: "authorized_timeout", label: "Tiempo de Acceso Autorizado", type: "text", default: "1h", hint: "Cuánto dura el acceso tras completar la secuencia" }
+        ]
+    },
+    "layer7-block": {
+        title: "Bloqueo de Tráfico (Layer7 + Patrones)",
+        description: "Bloquea P2P, streaming, redes sociales o protocolos específicos usando patrones regex Layer7 o filtros simples por puerto/dominio. Incluye advertencia de CPU.",
+        fileName: "mikrotik_layer7_block.rsc",
+        inputs: [
+            { id: "block_torrent", label: "Bloquear BitTorrent / P2P", type: "checkbox", default: true },
+            { id: "block_streaming", label: "Bloquear Streaming (YouTube, Netflix)", type: "checkbox", default: false },
+            { id: "block_social", label: "Bloquear Redes Sociales (Facebook, TikTok, Instagram)", type: "checkbox", default: false },
+            { id: "block_gaming", label: "Bloquear Tráfico de Gaming", type: "checkbox", default: false },
+            { id: "block_adult", label: "Bloquear Sitios para Adultos (TLDs comunes)", type: "checkbox", default: false },
+            { id: "custom_pattern_name", label: "Patrón Custom - Nombre", type: "text", default: "", hint: "Vacío = no se crea patrón custom" },
+            { id: "custom_pattern_regex", label: "Patrón Custom - Regex", type: "text", default: "", hint: "Ej: ^.+(badword|otro).*$" },
+            {
+                id: "scope",
+                label: "Aplicar a",
+                type: "select",
+                options: [
+                    { value: "all-lan", label: "Toda la LAN (forward)" },
+                    { value: "specific-list", label: "Address-list específica" }
+                ],
+                default: "all-lan"
+            },
+            { id: "target_list", label: "Address-list Objetivo", type: "text", default: "filtered-clients", hint: "Solo si seleccionaste 'Address-list específica'. Crea esa lista con las IPs a filtrar." }
+        ]
     }
 };
 
@@ -885,6 +991,298 @@ const generators = {
 
         code += `# SUGERENCIA: Después de probar, crea DHCP server, firewall y NAT por cada VLAN según necesites.\n`;
         code += `# Para aislar VLANs entre sí: agrega regla en /ip firewall filter chain=forward action=drop entre subredes.\n`;
+
+        return code;
+    },
+    "brute-force": (inputs, version) => {
+        const ports = [];
+        if (inputs.protect_ssh) ports.push("22");
+        if (inputs.protect_winbox) ports.push("8291");
+        if (inputs.protect_api) ports.push("8728", "8729");
+        if (inputs.protect_www) ports.push("80", "443");
+        if (inputs.custom_ports && inputs.custom_ports.trim()) {
+            inputs.custom_ports.split(',').forEach(p => { const t = p.trim(); if (t) ports.push(t); });
+        }
+        const portList = ports.join(',');
+
+        let code = `# ====================================================\n`;
+        code += `# SCRIPT: Protección Anti Brute-Force (Address-List Stages)\n`;
+        code += `# RouterOS Version: ${version.toUpperCase()}\n`;
+        code += `# Generado: ${new Date().toLocaleDateString()}\n`;
+        code += `# Tras ${4} intentos fallidos, la IP queda baneada ${inputs.blacklist_timeout}.\n`;
+        code += `# ====================================================\n\n`;
+
+        if (portList === '') {
+            code += `# ADVERTENCIA: No seleccionaste ningún servicio a proteger. Activa al menos uno.\n`;
+            return code;
+        }
+
+        const whitelistEntries = (inputs.whitelist_ips || "").split('\n').map(l => l.trim()).filter(l => l.length > 0);
+        if (whitelistEntries.length > 0) {
+            code += `# 1. Address-list de IPs confiables (no se bloquean nunca)\n`;
+            code += `/ip firewall address-list\n`;
+            whitelistEntries.forEach(ip => {
+                code += `add list=trusted address=${ip} comment="Whitelist confiable"\n`;
+            });
+            code += `\n`;
+        }
+
+        code += `# 2. Reglas anti brute-force en orden inverso (más antigua arriba)\n`;
+        code += `/ip firewall filter\n`;
+        code += `# 2.1 Permitir conexiones desde IPs en la whitelist (corta evaluación)\n`;
+        if (whitelistEntries.length > 0) {
+            code += `add chain=input action=accept src-address-list=trusted comment="Whitelist - acceso permitido"\n`;
+        }
+        code += `# 2.2 Drop inmediato a IPs ya baneadas\n`;
+        code += `add chain=input action=drop protocol=tcp dst-port=${portList} src-address-list=ban-final comment="Brute force: drop blacklisted"\n\n`;
+
+        code += `# 2.3 Stages: si una IP avanza por los stages, termina en la blacklist final\n`;
+        code += `add chain=input action=add-src-to-address-list address-list=ban-final address-list-timeout=${inputs.blacklist_timeout} protocol=tcp dst-port=${portList} connection-state=new src-address-list=bf-stage3 comment="Brute force: stage3 -> blacklist"\n`;
+        code += `add chain=input action=add-src-to-address-list address-list=bf-stage3 address-list-timeout=${inputs.stage_timeout} protocol=tcp dst-port=${portList} connection-state=new src-address-list=bf-stage2 comment="Brute force: stage2 -> stage3"\n`;
+        code += `add chain=input action=add-src-to-address-list address-list=bf-stage2 address-list-timeout=${inputs.stage_timeout} protocol=tcp dst-port=${portList} connection-state=new src-address-list=bf-stage1 comment="Brute force: stage1 -> stage2"\n`;
+        code += `add chain=input action=add-src-to-address-list address-list=bf-stage1 address-list-timeout=${inputs.stage_timeout} protocol=tcp dst-port=${portList} connection-state=new comment="Brute force: primer intento -> stage1"\n\n`;
+
+        code += `# REVISAR baneados: /ip firewall address-list print where list=ban-final\n`;
+        code += `# DESBANEAR manual: /ip firewall address-list remove [find list=ban-final address=A.B.C.D]\n`;
+        code += `# NOTA: Estas reglas se evaluan ANTES que las reglas accept normales. Asegúrate de que el orden\n`;
+        code += `#       en /ip firewall filter sea correcto: estas anti-brute-force PRIMERO, luego las de servicio.\n`;
+
+        return code;
+    },
+    "address-list-url": (inputs, version) => {
+        const presets = {
+            "firehol1": "https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset",
+            "spamhaus-drop": "https://www.spamhaus.org/drop/drop.txt",
+            "stamparm-blackbook": "https://raw.githubusercontent.com/stamparm/blackbook/master/blackbook.txt",
+            "ipsum": "https://raw.githubusercontent.com/stamparm/ipsum/master/levels/3.txt"
+        };
+
+        const url = (inputs.preset && inputs.preset !== 'custom' && presets[inputs.preset]) ? presets[inputs.preset] : inputs.list_url;
+        const listName = inputs.list_name || "blocklist-auto";
+        const scriptName = `update-${listName}`;
+        const schedulerName = `sched-${listName}`;
+        const fileName = inputs.list_format === 'rsc' ? `${listName}.rsc` : `${listName}.txt`;
+
+        let code = `# ====================================================\n`;
+        code += `# SCRIPT: Bloqueo por Address-List desde URL\n`;
+        code += `# RouterOS Version: ${version.toUpperCase()}\n`;
+        code += `# Generado: ${new Date().toLocaleDateString()}\n`;
+        code += `# Fuente: ${url}\n`;
+        code += `# ====================================================\n\n`;
+
+        code += `# 1. Script de actualización: descarga la lista y reconstruye la address-list\n`;
+        code += `/system script\n`;
+        code += `add name=${scriptName} policy=read,write,policy,test source={\n`;
+        code += `    :log info "Descargando blocklist ${listName}..."\n`;
+        code += `    :do { /file remove ${fileName} } on-error={}\n`;
+        code += `    /tool fetch url="${url}" mode=https dst-path=${fileName}\n`;
+        code += `    :delay 10s\n`;
+
+        if (inputs.list_format === 'rsc') {
+            code += `    # Formato .rsc: borrar lista vieja e importar\n`;
+            code += `    /ip firewall address-list remove [find list=${listName}]\n`;
+            code += `    /import file-name=${fileName}\n`;
+        } else {
+            code += `    # Formato .txt: parsear línea por línea (uso eficiente de :find)\n`;
+            code += `    /ip firewall address-list remove [find list=${listName}]\n`;
+            code += `    :local content [/file get ${fileName} contents]\n`;
+            code += `    :local contentLen [:len $content]\n`;
+            code += `    :local pos 0\n`;
+            code += `    :local added 0\n`;
+            code += `    :while ($pos < $contentLen) do={\n`;
+            code += `        :local nl [:find $content "\\n" $pos]\n`;
+            code += `        :if ($nl = [:nothing]) do={ :set nl $contentLen }\n`;
+            code += `        :local line [:pick $content $pos $nl]\n`;
+            code += `        :set pos ($nl + 1)\n`;
+            code += `        # Saltar comentarios (#) y secciones (;)\n`;
+            code += `        :local hashPos [:find $line "#"]\n`;
+            code += `        :if ($hashPos != [:nothing]) do={ :set line [:pick $line 0 $hashPos] }\n`;
+            code += `        :local semiPos [:find $line ";"]\n`;
+            code += `        :if ($semiPos != [:nothing]) do={ :set line [:pick $line 0 $semiPos] }\n`;
+            code += `        # Quitar CR final si el archivo usa CRLF (Windows)\n`;
+            code += `        :local crPos [:find $line "\\r"]\n`;
+            code += `        :if ($crPos != [:nothing]) do={ :set line [:pick $line 0 $crPos] }\n`;
+            code += `        # Solo aceptar si parece IP (>=7 chars y empieza con dígito)\n`;
+            code += `        :if ([:len $line] >= 7) do={\n`;
+            code += `            :local firstChar [:pick $line 0]\n`;
+            code += `            :if ($firstChar >= "0" && $firstChar <= "9") do={\n`;
+            code += `                :do {\n`;
+            code += `                    /ip firewall address-list add list=${listName} address=$line comment="Auto ${listName}"\n`;
+            code += `                    :set added ($added + 1)\n`;
+            code += `                } on-error={}\n`;
+            code += `            }\n`;
+            code += `        }\n`;
+            code += `    }\n`;
+            code += `    :log info ("Address-list ${listName} actualizada: " . $added . " entradas")\n`;
+        }
+        code += `}\n\n`;
+
+        code += `# 2. Programar la actualización\n`;
+        code += `/system scheduler\n`;
+        code += `add name=${schedulerName} interval=${inputs.update_interval} start-time=${inputs.update_time} on-event="/system script run ${scriptName}" comment="Actualizar ${listName}"\n\n`;
+
+        code += `# 3. Reglas de bloqueo en el firewall\n`;
+        code += `/ip firewall filter\n`;
+        const chains = [];
+        if (inputs.block_chain === 'input-forward') { chains.push('input', 'forward'); }
+        else if (inputs.block_chain === 'input') { chains.push('input'); }
+        else { chains.push('forward'); }
+
+        chains.forEach(ch => {
+            if (inputs.block_direction === 'src' || inputs.block_direction === 'both') {
+                code += `add chain=${ch} action=drop src-address-list=${listName} comment="Drop ${listName} (origen)"\n`;
+            }
+            if (inputs.block_direction === 'dst' || inputs.block_direction === 'both') {
+                code += `add chain=${ch} action=drop dst-address-list=${listName} comment="Drop ${listName} (destino)"\n`;
+            }
+        });
+
+        code += `\n# Ejecuta manualmente la primera vez para poblar la lista:\n`;
+        code += `# /system script run ${scriptName}\n`;
+        code += `# Listas alternativas populares:\n`;
+        code += `#   FireHOL Level 1: https://raw.githubusercontent.com/firehol/blocklist-ipsets/master/firehol_level1.netset\n`;
+        code += `#   Spamhaus DROP:   https://www.spamhaus.org/drop/drop.txt\n`;
+        code += `#   IPsum nivel 3:   https://raw.githubusercontent.com/stamparm/ipsum/master/levels/3.txt\n`;
+        code += `# IMPORTANTE: las listas tipo .txt pueden tener miles de IPs; el primer fetch puede tardar varios minutos.\n`;
+
+        return code;
+    },
+    "port-knocking": (inputs, version) => {
+        const k1 = inputs.knock_port_1 || "7654";
+        const k2 = inputs.knock_port_2 || "8765";
+        const k3 = inputs.knock_port_3 || "9876";
+        const proto = inputs.knock_protocol || "tcp";
+        const targetPorts = inputs.target_ports || "22,8291";
+        const stageT = inputs.stage_timeout || "10s";
+        const authT = inputs.authorized_timeout || "1h";
+
+        let code = `# ====================================================\n`;
+        code += `# SCRIPT: Port Knocking (Acceso Oculto a Servicios)\n`;
+        code += `# RouterOS Version: ${version.toUpperCase()}\n`;
+        code += `# Generado: ${new Date().toLocaleDateString()}\n`;
+        code += `# Secuencia: ${proto.toUpperCase()} ${k1} -> ${k2} -> ${k3} (en menos de ${stageT})\n`;
+        code += `# Tras la secuencia, los puertos ${targetPorts} se abren por ${authT} para la IP que tocó.\n`;
+        code += `# ====================================================\n\n`;
+
+        code += `/ip firewall filter\n`;
+        code += `# 1. Permitir acceso a IPs ya autorizadas (que completaron la secuencia)\n`;
+        code += `add chain=input action=accept protocol=tcp dst-port=${targetPorts} src-address-list=knock-authorized comment="Port Knocking: acceso autorizado"\n\n`;
+
+        code += `# 2. Detectar la secuencia. Reglas en orden inverso (más restrictiva primero)\n`;
+        code += `# 2.3 Tercer toque -> mover a knock-authorized\n`;
+        code += `add chain=input action=add-src-to-address-list address-list=knock-authorized address-list-timeout=${authT} protocol=${proto} dst-port=${k3} src-address-list=knock-stage2 comment="Knock 3/3 - autorizado"\n`;
+        code += `add chain=input action=remove-from-address-list address-list=knock-stage2 protocol=${proto} dst-port=${k3} src-address-list=knock-stage2\n\n`;
+
+        code += `# 2.2 Segundo toque -> avanzar a stage2\n`;
+        code += `add chain=input action=add-src-to-address-list address-list=knock-stage2 address-list-timeout=${stageT} protocol=${proto} dst-port=${k2} src-address-list=knock-stage1 comment="Knock 2/3"\n`;
+        code += `add chain=input action=remove-from-address-list address-list=knock-stage1 protocol=${proto} dst-port=${k2} src-address-list=knock-stage1\n\n`;
+
+        code += `# 2.1 Primer toque -> stage1\n`;
+        code += `add chain=input action=add-src-to-address-list address-list=knock-stage1 address-list-timeout=${stageT} protocol=${proto} dst-port=${k1} comment="Knock 1/3"\n\n`;
+
+        code += `# 3. Bloquear el acceso normal a los puertos del servicio (lo deja inaccesible sin la secuencia)\n`;
+        code += `add chain=input action=drop protocol=tcp dst-port=${targetPorts} comment="Port Knocking: bloquear acceso directo"\n\n`;
+
+        code += `# Cómo activar el acceso desde Linux/Mac:\n`;
+        if (proto === 'tcp') {
+            code += `#   for p in ${k1} ${k2} ${k3}; do nc -z -w1 IP_DEL_ROUTER $p; sleep 1; done\n`;
+        } else {
+            code += `#   for p in ${k1} ${k2} ${k3}; do nmap -sU -p $p IP_DEL_ROUTER; done\n`;
+        }
+        code += `# Desde Windows: usar PortQry o un script PowerShell con Test-NetConnection.\n`;
+        code += `# Verificar autorización: /ip firewall address-list print where list=knock-authorized\n`;
+        code += `# IMPORTANTE: el orden de las reglas en /ip firewall filter es CRÍTICO. Estas deben ir ANTES\n`;
+        code += `#             del 'drop final' general del firewall, o ajustar con 'place-before'.\n`;
+
+        return code;
+    },
+    "layer7-block": (inputs, version) => {
+        const patterns = [];
+
+        if (inputs.block_torrent) {
+            patterns.push({
+                name: "l7-torrent",
+                regex: `^(\\\\x13bittorrent protocol|azver\\\\x01\$|get /scrape\\\\?info_hash=|get /announce\\\\?info_hash=|get /client/bitcomet/|GET /data\\\\?fid=).*\$`,
+                comment: "BitTorrent / P2P"
+            });
+        }
+        if (inputs.block_streaming) {
+            patterns.push({
+                name: "l7-streaming",
+                regex: `^.+(youtube|googlevideo|netflix|nflxvideo|hulu|primevideo|disneyplus|twitch).*\$`,
+                comment: "Streaming masivo"
+            });
+        }
+        if (inputs.block_social) {
+            patterns.push({
+                name: "l7-social",
+                regex: `^.+(facebook\\\\.com|fbcdn\\\\.net|instagram\\\\.com|tiktok\\\\.com|twitter\\\\.com|x\\\\.com|snapchat).*\$`,
+                comment: "Redes sociales"
+            });
+        }
+        if (inputs.block_gaming) {
+            patterns.push({
+                name: "l7-gaming",
+                regex: `^.+(steampowered|steamcommunity|riotgames|leagueoflegends|battle\\\\.net|epicgames|xboxlive|playstation|ea\\\\.com).*\$`,
+                comment: "Plataformas de gaming"
+            });
+        }
+        if (inputs.block_adult) {
+            patterns.push({
+                name: "l7-adult",
+                regex: `^.+(pornhub|xvideos|xnxx|xhamster|redtube|youporn|onlyfans|chaturbate).*\$`,
+                comment: "Sitios para adultos"
+            });
+        }
+        if (inputs.custom_pattern_name && inputs.custom_pattern_name.trim() && inputs.custom_pattern_regex && inputs.custom_pattern_regex.trim()) {
+            patterns.push({
+                name: inputs.custom_pattern_name.trim(),
+                regex: inputs.custom_pattern_regex.trim(),
+                comment: "Patrón personalizado"
+            });
+        }
+
+        let code = `# ====================================================\n`;
+        code += `# SCRIPT: Bloqueo Layer7 (Patrones de Protocolo / Dominio)\n`;
+        code += `# RouterOS Version: ${version.toUpperCase()}\n`;
+        code += `# Generado: ${new Date().toLocaleDateString()}\n`;
+        code += `# ADVERTENCIA: Layer7 consume CPU. Úsalo solo en routers potentes o para tráfico bajo.\n`;
+        code += `# Para uso masivo, prefiere TLS-host (en v7) o address-list por dominio resuelto.\n`;
+        code += `# ====================================================\n\n`;
+
+        if (patterns.length === 0) {
+            code += `# No se seleccionó ningún patrón a bloquear. Activa al menos una opción.\n`;
+            return code;
+        }
+
+        code += `# 1. Definir patrones Layer7\n`;
+        code += `/ip firewall layer7-protocol\n`;
+        patterns.forEach(p => {
+            code += `add name=${p.name} regexp="${p.regex}" comment="${p.comment}"\n`;
+        });
+        code += `\n`;
+
+        code += `# 2. Reglas de bloqueo en forward\n`;
+        code += `/ip firewall filter\n`;
+        patterns.forEach(p => {
+            if (inputs.scope === 'specific-list') {
+                code += `add chain=forward action=drop layer7-protocol=${p.name} src-address-list=${inputs.target_list} comment="Block ${p.comment} (filtered)"\n`;
+            } else {
+                code += `add chain=forward action=drop layer7-protocol=${p.name} comment="Block ${p.comment}"\n`;
+            }
+        });
+        code += `\n`;
+
+        if (inputs.scope === 'specific-list') {
+            code += `# Recordatorio: crea la address-list y agrega los clientes a filtrar:\n`;
+            code += `# /ip firewall address-list add list=${inputs.target_list} address=192.168.88.50 comment="Cliente filtrado"\n\n`;
+        }
+
+        code += `# OPTIMIZACIÓN: Layer7 solo debe ver tráfico de un mismo flujo. Marca primero con mangle:\n`;
+        code += `# /ip firewall mangle add chain=prerouting action=mark-packet new-packet-mark=l7-check\n`;
+        code += `# y luego usa packet-mark=l7-check en las reglas de filter.\n`;
+        code += `# En RouterOS v7: para bloqueo de dominios HTTPS, prefiere tls-host en chain=forward.\n`;
+        code += `# Ejemplo: /ip firewall filter add chain=forward action=drop tls-host="*.facebook.com"\n`;
 
         return code;
     }
