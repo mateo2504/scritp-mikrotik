@@ -154,7 +154,7 @@ function initializeFormValues(scriptKey) {
         const wanCountKey = `${scriptKey}_wan_count`;
         if (formValues[wanCountKey] === undefined) formValues[wanCountKey] = "2";
         const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4"];
-        for (let i = 1; i <= 5; i++) {
+        for (let i = 1; i <= 10; i++) {
             const wanInterfaceKey = `${scriptKey}_wan${i}_interface`;
             const wanGatewayKey = `${scriptKey}_wan${i}_gateway`;
 
