@@ -105,21 +105,21 @@
         code += `# División PCC: Asigna conexiones a interfaces WAN de forma equitativa (${inputs.pcc_type})\n`;
         for (let i = 1; i <= N; i++) {
             const wanInterface = inputs[`wan${i}_interface`] || `ether${i}`;
-            code += `add chain=prerouting ${lanMatchParam} dst-address-type=!local connection-mark=no-mark per-connection-classifier=${inputs.pcc_type}:${N}/${i-1} action=mark-connection new-connection-mark=${wanInterface}_conn passthrough=yes comment="PCC Linea ${i}"\n`;
+            code += `add chain=prerouting ${lanMatchParam} connection-state=new dst-address-type=!local connection-mark=no-mark per-connection-classifier=${inputs.pcc_type}:${N}/${i-1} action=mark-connection new-connection-mark=${wanInterface}_conn passthrough=yes comment="PCC Linea ${i}"\n`;
         }
         code += `\n`;
     
         code += `# Marcar rutas basadas en las conexiones marcadas anteriormente para clientes LAN\n`;
         for (let i = 1; i <= N; i++) {
             const wanInterface = inputs[`wan${i}_interface`] || `ether${i}`;
-            code += `add chain=prerouting ${lanMatchParam} connection-mark=${wanInterface}_conn action=mark-routing new-routing-mark=to_${wanInterface} passthrough=yes\n`;
+            code += `add chain=prerouting ${lanMatchParam} connection-mark=${wanInterface}_conn action=mark-routing new-routing-mark=to_${wanInterface} passthrough=no\n`;
         }
         code += `\n`;
     
         code += `# Marcar rutas para el tráfico propio generado por el router\n`;
         for (let i = 1; i <= N; i++) {
             const wanInterface = inputs[`wan${i}_interface`] || `ether${i}`;
-            code += `add chain=output connection-mark=${wanInterface}_conn action=mark-routing new-routing-mark=to_${wanInterface} passthrough=yes\n`;
+            code += `add chain=output connection-mark=${wanInterface}_conn action=mark-routing new-routing-mark=to_${wanInterface} passthrough=no\n`;
         }
         code += `\n`;
     
@@ -130,14 +130,14 @@
             for (let i = 1; i <= N; i++) {
                 const wanInterface = inputs[`wan${i}_interface`] || `ether${i}`;
                 const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
-                code += `add dst-address=0.0.0.0/0 gateway=${wanGateway} distance=1 routing-table=to_${wanInterface} check-gateway=ping comment="WAN${i} Primaria en su tabla"\n`;
-                
+                code += `add dst-address=0.0.0.0/0 gateway=${wanGateway}@main distance=1 routing-table=to_${wanInterface} check-gateway=ping comment="WAN${i} Primaria en su tabla"\n`;
+
                 // Backup routes in the custom table
                 let dist = 2;
                 for (let j = 1; j <= N; j++) {
                     if (j === i) continue;
                     const backupGateway = inputs[`wan${j}_gateway`] || `192.168.${j}.1`;
-                    code += `add dst-address=0.0.0.0/0 gateway=${backupGateway} distance=${dist} routing-table=to_${wanInterface} check-gateway=ping comment="WAN${j} Respaldo en tabla de WAN${i}"\n`;
+                    code += `add dst-address=0.0.0.0/0 gateway=${backupGateway}@main distance=${dist} routing-table=to_${wanInterface} check-gateway=ping comment="WAN${j} Respaldo en tabla de WAN${i}"\n`;
                     dist++;
                 }
             }
