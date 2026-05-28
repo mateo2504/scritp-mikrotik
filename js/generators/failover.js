@@ -37,10 +37,10 @@
         code += `# 1. Configurar rutas principales condicionadas por hosts de internet\n`;
         code += `/ip route\n`;
     
-        code += `# Rutas virtuales recursivas que comprueban conexión real (target-scope=10 por defecto)\n`;
+        code += `# Rutas virtuales recursivas que comprueban conexión real (target-scope=11 para resolver el gateway por la ruta de control scope=10)\n`;
         for (let i = 1; i <= N; i++) {
             const pingHost = inputs[`ping_host${i}`] || hostDefaults[i - 1] || "8.8.8.8";
-            code += `add dst-address=0.0.0.0/0 gateway=${pingHost} check-gateway=ping distance=${i} comment="WAN${i} Recursivo Primario"\n`;
+            code += `add dst-address=0.0.0.0/0 gateway=${pingHost} check-gateway=ping target-scope=11 distance=${i} comment="WAN${i} Recursivo Primario"\n`;
         }
         code += `\n`;
     
