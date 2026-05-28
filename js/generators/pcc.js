@@ -6,7 +6,18 @@
     description: "Distribución de tráfico balanceada entre varias conexiones de Internet (2 a 10 WANs) utilizando marcas de ruta.",
     fileName: "mikrotik_pcc_bal.rsc",
     inputs: [
-        { 
+        {
+            id: "recursive_routes",
+            label: "Failover por Internet real (Rutas Recursivas)",
+            type: "select",
+            options: [
+                { value: "no", label: "No (check-gateway al gateway directo)" },
+                { value: "yes", label: "Sí (ping a host externo vía ruta recursiva)" }
+            ],
+            default: "no",
+            hint: "Si se habilita, cada WAN monitorea un host público externo. Detecta caídas de Internet aunque el gateway siga activo."
+        },
+        {
             id: "wan_count", 
             label: "Cantidad de Líneas WAN", 
             type: "select", 
@@ -125,48 +136,58 @@
     
         code += `# 4. Configurar las rutas IP\n`;
         code += `/ip route\n`;
-        if (isV7) {
-            code += `# Enrutar tráfico marcado a sus respectivas tablas (con failover si cae una línea)\n`;
-            for (let i = 1; i <= N; i++) {
-                const wanInterface = inputs[`wan${i}_interface`] || `ether${i}`;
-                const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
-                code += `add dst-address=0.0.0.0/0 gateway=${wanGateway}@main distance=1 routing-table=to_${wanInterface} check-gateway=ping comment="WAN${i} Primaria en su tabla"\n`;
 
-                // Backup routes in the custom table
-                let dist = 2;
-                for (let j = 1; j <= N; j++) {
-                    if (j === i) continue;
-                    const backupGateway = inputs[`wan${j}_gateway`] || `192.168.${j}.1`;
-                    code += `add dst-address=0.0.0.0/0 gateway=${backupGateway}@main distance=${dist} routing-table=to_${wanInterface} check-gateway=ping comment="WAN${j} Respaldo en tabla de WAN${i}"\n`;
-                    dist++;
-                }
+        const recursive = inputs.recursive_routes === 'yes';
+        const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4"];
+        const tableParam = isV7 ? 'routing-table' : 'routing-mark';
+
+        if (recursive) {
+            code += `# Rutas de control /32: fuerzan el ping de cada host externo por su WAN correspondiente (scope=10)\n`;
+            for (let i = 1; i <= N; i++) {
+                const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
+                const pingHost = inputs[`ping_host${i}`] || hostDefaults[i - 1] || "8.8.8.8";
+                code += `add dst-address=${pingHost}/32 gateway=${wanGateway} scope=10 comment="Control recursivo WAN${i}"\n`;
             }
             code += `\n`;
-            code += `# Rutas por defecto en la tabla principal (con distancias para failover si cae una línea completa)\n`;
-            for (let i = 1; i <= N; i++) {
-                const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
-                code += `add dst-address=0.0.0.0/0 gateway=${wanGateway} distance=${i} check-gateway=ping comment="Ruta Principal WAN${i}"\n`;
+        }
+
+        code += `# Enrutar tráfico marcado a sus respectivas ${isV7 ? 'tablas' : 'marcas'} (con failover si cae una línea)\n`;
+        for (let i = 1; i <= N; i++) {
+            const wanInterface = inputs[`wan${i}_interface`] || `ether${i}`;
+            const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
+            const pingHost = inputs[`ping_host${i}`] || hostDefaults[i - 1] || "8.8.8.8";
+            if (recursive) {
+                const gw = isV7 ? `${pingHost}@main` : pingHost;
+                code += `add dst-address=0.0.0.0/0 gateway=${gw} check-gateway=ping target-scope=11 distance=1 ${tableParam}=to_${wanInterface} comment="WAN${i} Recursiva (su ${isV7 ? 'tabla' : 'marca'})"\n`;
+            } else {
+                const gw = isV7 ? `${wanGateway}@main` : wanGateway;
+                code += `add dst-address=0.0.0.0/0 gateway=${gw} distance=1 ${tableParam}=to_${wanInterface} check-gateway=ping comment="WAN${i} Primaria (su ${isV7 ? 'tabla' : 'marca'})"\n`;
             }
-        } else {
-            code += `# Enrutar tráfico marcado a sus respectivas marcas de ruta (v6 con failover)\n`;
-            for (let i = 1; i <= N; i++) {
-                const wanInterface = inputs[`wan${i}_interface`] || `ether${i}`;
-                const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
-                code += `add dst-address=0.0.0.0/0 gateway=${wanGateway} distance=1 routing-mark=to_${wanInterface} check-gateway=ping comment="WAN${i} Primaria en su marca"\n`;
-                
-                // Backup routes in the custom routing mark
-                let dist = 2;
-                for (let j = 1; j <= N; j++) {
-                    if (j === i) continue;
-                    const backupGateway = inputs[`wan${j}_gateway`] || `192.168.${j}.1`;
-                    code += `add dst-address=0.0.0.0/0 gateway=${backupGateway} distance=${dist} routing-mark=to_${wanInterface} check-gateway=ping comment="WAN${j} Respaldo en marca de WAN${i}"\n`;
-                    dist++;
+
+            // Backup routes in the custom table/mark
+            let dist = 2;
+            for (let j = 1; j <= N; j++) {
+                if (j === i) continue;
+                const backupGateway = inputs[`wan${j}_gateway`] || `192.168.${j}.1`;
+                const backupHost = inputs[`ping_host${j}`] || hostDefaults[j - 1] || "8.8.8.8";
+                if (recursive) {
+                    const gw = isV7 ? `${backupHost}@main` : backupHost;
+                    code += `add dst-address=0.0.0.0/0 gateway=${gw} check-gateway=ping target-scope=11 distance=${dist} ${tableParam}=to_${wanInterface} comment="WAN${j} Respaldo recursivo en ${isV7 ? 'tabla' : 'marca'} de WAN${i}"\n`;
+                } else {
+                    const gw = isV7 ? `${backupGateway}@main` : backupGateway;
+                    code += `add dst-address=0.0.0.0/0 gateway=${gw} distance=${dist} ${tableParam}=to_${wanInterface} check-gateway=ping comment="WAN${j} Respaldo en ${isV7 ? 'tabla' : 'marca'} de WAN${i}"\n`;
                 }
+                dist++;
             }
-            code += `\n`;
-            code += `# Rutas por defecto en la tabla principal (con distancias para failover si cae una línea completa)\n`;
-            for (let i = 1; i <= N; i++) {
-                const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
+        }
+        code += `\n`;
+        code += `# Rutas por defecto en la tabla principal (con distancias para failover si cae una línea completa)\n`;
+        for (let i = 1; i <= N; i++) {
+            const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
+            const pingHost = inputs[`ping_host${i}`] || hostDefaults[i - 1] || "8.8.8.8";
+            if (recursive) {
+                code += `add dst-address=0.0.0.0/0 gateway=${pingHost} check-gateway=ping target-scope=11 distance=${i} comment="Ruta Principal Recursiva WAN${i}"\n`;
+            } else {
                 code += `add dst-address=0.0.0.0/0 gateway=${wanGateway} distance=${i} check-gateway=ping comment="Ruta Principal WAN${i}"\n`;
             }
         }
