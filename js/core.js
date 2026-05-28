@@ -109,7 +109,8 @@ function updateScript() {
                     : `192.168.${i}.1`;
             }
 
-            if (currentScript === 'failover') {
+            const pccRecursive = currentScript === 'pcc' && (currentInputs.recursive_routes || formValues['pcc_recursive_routes']) === 'yes';
+            if (currentScript === 'failover' || pccRecursive) {
                 const hostId = `ping_host${i}`;
                 const hostEl = document.getElementById(hostId);
                 if (hostEl) {
@@ -242,7 +243,7 @@ function renderInputs() {
             const select = group.querySelector('select');
             select.addEventListener('change', () => {
                 formValues[`${currentScript}_${input.id}`] = select.value;
-                if (input.id === 'wan_count' || input.id === 'lan_match_type') {
+                if (input.id === 'wan_count' || input.id === 'lan_match_type' || input.id === 'recursive_routes') {
                     renderInputs();
                 }
                 updateScript();
@@ -310,7 +311,8 @@ function renderDynamicWanFields(N, container) {
         appendDynamicTextField(wanFieldsContainer, `wan${i}_interface`, `Interfaz WAN ${i}`, `ether${i}`);
         appendDynamicTextField(wanFieldsContainer, `wan${i}_gateway`, `Gateway WAN ${i}`, `192.168.${i}.1`);
 
-        if (currentScript === 'failover') {
+        const pccRecursive = currentScript === 'pcc' && formValues['pcc_recursive_routes'] === 'yes';
+        if (currentScript === 'failover' || pccRecursive) {
             appendDynamicTextField(wanFieldsContainer, `ping_host${i}`, `Host Monitoreo WAN ${i}`, hostDefaults[i - 1] || "8.8.8.8");
         }
     }
