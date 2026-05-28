@@ -3,7 +3,7 @@
     const definition = {
     key: 'pcc',
     title: "Balanceo PCC (Múltiples WAN)",
-    description: "Distribución de tráfico balanceada entre varias conexiones de Internet (2 a 5 WANs) utilizando marcas de ruta.",
+    description: "Distribución de tráfico balanceada entre varias conexiones de Internet (2 a 10 WANs) utilizando marcas de ruta.",
     fileName: "mikrotik_pcc_bal.rsc",
     inputs: [
         { 
@@ -14,8 +14,13 @@
                 { value: "2", label: "2 WANs" },
                 { value: "3", label: "3 WANs" },
                 { value: "4", label: "4 WANs" },
-                { value: "5", label: "5 WANs" }
-            ], 
+                { value: "5", label: "5 WANs" },
+                { value: "6", label: "6 WANs" },
+                { value: "7", label: "7 WANs" },
+                { value: "8", label: "8 WANs" },
+                { value: "9", label: "9 WANs" },
+                { value: "10", label: "10 WANs" }
+            ],
             default: "2",
             hint: "Número de interfaces WAN a balancear"
         },
