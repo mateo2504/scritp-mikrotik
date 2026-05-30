@@ -97,14 +97,23 @@
             code += `\n`;
         }
     
-        code += `# 2. Crear Address List de la red local para evitar balancear tráfico interno LAN-LAN\n`;
+        code += `# 2. Crear Address List de redes conectadas para evitar balancear tráfico local/WAN\n`;
         code += `/ip firewall address-list\n`;
-        code += `add address=${inputs.lan_network} list=local-network\n\n`;
+        code += `add address=${inputs.lan_network} list=connected-networks comment="Red LAN"\n`;
+        for (let i = 1; i <= N; i++) {
+            const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
+            const parts = wanGateway.split('.');
+            if (parts.length === 4) {
+                const wanSubnet = `${parts[0]}.${parts[1]}.${parts[2]}.0/24`;
+                code += `add address=${wanSubnet} list=connected-networks comment="Subred WAN${i} (Estimada)"\n`;
+            }
+        }
+        code += `\n`;
     
         code += `# 3. Reglas de Mangle (Exclusión local y clasificación de tráfico)\n`;
         code += `/ip firewall mangle\n`;
-        code += `# Aceptar tráfico local sin marcar\n`;
-        code += `add chain=prerouting dst-address-list=local-network ${lanMatchParam} action=accept comment="Excluir trafico interno LAN"\n\n`;
+        code += `# Aceptar tráfico hacia redes locales/conectadas sin marcar\n`;
+        code += `add chain=prerouting dst-address-list=connected-networks ${lanMatchParam} action=accept comment="Excluir trafico local y WANs conectadas"\n\n`;
     
         code += `# Mantener las conexiones entrantes en su respectiva interfaz WAN de origen\n`;
         for (let i = 1; i <= N; i++) {
