@@ -83,7 +83,7 @@ function updateScript() {
     // PCC/Failover: lectura de los inputs WAN dinámicos generados después de wan_count
     if (currentScript === 'pcc' || currentScript === 'failover') {
         const wanCount = parseInt(currentInputs.wan_count || 2);
-        const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4"];
+        const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4", "1.0.0.1", "4.2.2.1", "4.2.2.2", "208.67.220.220", "149.112.112.112"];
 
         for (let i = 1; i <= wanCount; i++) {
             const interfaceId = `wan${i}_interface`;
@@ -154,7 +154,7 @@ function initializeFormValues(scriptKey) {
     if (scriptKey === 'pcc' || scriptKey === 'failover') {
         const wanCountKey = `${scriptKey}_wan_count`;
         if (formValues[wanCountKey] === undefined) formValues[wanCountKey] = "2";
-        const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4"];
+        const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4", "1.0.0.1", "4.2.2.1", "4.2.2.2", "208.67.220.220", "149.112.112.112"];
         for (let i = 1; i <= 10; i++) {
             const wanInterfaceKey = `${scriptKey}_wan${i}_interface`;
             const wanGatewayKey = `${scriptKey}_wan${i}_gateway`;
@@ -288,7 +288,7 @@ function renderInputs() {
 }
 
 function renderDynamicWanFields(N, container) {
-    const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4"];
+    const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4", "1.0.0.1", "4.2.2.1", "4.2.2.2", "208.67.220.220", "149.112.112.112"];
 
     const wanFieldsContainer = document.createElement('div');
     wanFieldsContainer.className = 'dynamic-wan-fields';

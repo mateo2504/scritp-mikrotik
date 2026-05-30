@@ -147,7 +147,7 @@
         code += `/ip route\n`;
 
         const recursive = inputs.recursive_routes === 'yes';
-        const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4"];
+        const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4", "1.0.0.1", "4.2.2.1", "4.2.2.2", "208.67.220.220", "149.112.112.112"];
         const tableParam = isV7 ? 'routing-table' : 'routing-mark';
 
         if (recursive) {
