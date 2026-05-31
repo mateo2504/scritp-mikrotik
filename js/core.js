@@ -216,6 +216,17 @@ function renderInputs() {
             if (input.id === 'method_v7' && targetType === 'port-protocol') return;
         }
 
+        if (currentScript === 'rate-limit') {
+            const useBurst = formValues['rate-limit_use_burst'] !== undefined ? formValues['rate-limit_use_burst'] : true;
+            const usePriorityLimitAt = formValues['rate-limit_use_priority_limitat'] !== undefined ? formValues['rate-limit_use_priority_limitat'] : true;
+            
+            const burstFields = ['upload_burst', 'download_burst', 'upload_threshold', 'download_threshold', 'upload_time', 'download_time'];
+            const priorityFields = ['priority', 'upload_limit_at', 'download_limit_at'];
+            
+            if (!useBurst && burstFields.includes(input.id)) return;
+            if (!usePriorityLimitAt && priorityFields.includes(input.id)) return;
+        }
+
         const group = document.createElement('div');
         const storedVal = formValues[`${currentScript}_${input.id}`];
         const val = storedVal !== undefined ? storedVal : (input.default !== undefined ? input.default : '');
@@ -232,6 +243,9 @@ function renderInputs() {
             const checkbox = group.querySelector('input');
             checkbox.addEventListener('change', () => {
                 formValues[`${currentScript}_${input.id}`] = checkbox.checked;
+                if (input.id === 'use_burst' || input.id === 'use_priority_limitat') {
+                    renderInputs();
+                }
                 updateScript();
             });
         } else if (input.type === 'select') {
