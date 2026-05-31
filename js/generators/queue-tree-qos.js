@@ -14,8 +14,8 @@
             { id: "prio_dns", label: "Priorizar DNS e ICMP (puerto 53, Ping)", type: "checkbox", default: true, hint: "Prioridad 2" },
             { id: "prio_gaming", label: "Priorizar Gaming (Xbox, PS, Steam)", type: "checkbox", default: true, hint: "Prioridad 3" },
             { id: "prio_video", label: "Priorizar Video conferencia (Zoom, Meet, Teams)", type: "checkbox", default: true, hint: "Prioridad 4" },
-            { id: "prio_streaming", label: "Gestionar Streaming (YouTube, Netflix)", type: "checkbox", default: true, hint: "Prioridad 5 - Para fluidez de video" },
-            { id: "prio_social", label: "Gestionar Redes Sociales (Facebook, TikTok, Instagram)", type: "checkbox", default: true, hint: "Prioridad 6 - Tráfico pesado en ráfagas" },
+            { id: "prio_streaming", label: "Gestionar Streaming (YouTube, Netflix, Disney+, Prime Video, Twitch, HBO)", type: "checkbox", default: true, hint: "Prioridad 5 - Para fluidez de video" },
+            { id: "prio_social", label: "Gestionar Redes Sociales y WhatsApp (Facebook, TikTok, Instagram, Twitter/X, WhatsApp)", type: "checkbox", default: true, hint: "Prioridad 6 - Redes sociales, chat y transferencia de media/archivos" },
             { id: "deprio_bulk", label: "Penalizar descargas masivas (>50MB en una conexión)", type: "checkbox", default: true, hint: "Prioridad 8 (la más baja). Heurística por bytes." },
             { id: "use_pcq", label: "Repartir equitativamente entre usuarios (PCQ)", type: "checkbox", default: true, hint: "Si un usuario satura la línea, comparte entre todos los activos" }
         ]
@@ -120,16 +120,24 @@
             code += `# 0.5 ADDRESS LISTS para DNS Snooping (Clasificación de Dominios)\n`;
             code += `/ip firewall address-list\n`;
             if (inputs.prio_streaming) {
-                code += `# Dominios de Streaming (YouTube, Netflix)\n`;
+                code += `# Dominios de Streaming (YouTube, Netflix, Disney+, Prime, Twitch, Max)\n`;
                 code += `add address=youtube.com list=streaming-domains\n`;
                 code += `add address=www.youtube.com list=streaming-domains\n`;
                 code += `add address=googlevideo.com list=streaming-domains\n`;
                 code += `add address=ytimg.com list=streaming-domains\n`;
                 code += `add address=netflix.com list=streaming-domains\n`;
                 code += `add address=nflxvideo.net list=streaming-domains\n`;
+                code += `add address=nflxext.com list=streaming-domains\n`;
+                code += `add address=nflximg.net list=streaming-domains\n`;
+                code += `add address=twitch.tv list=streaming-domains\n`;
+                code += `add address=disneyplus.com list=streaming-domains\n`;
+                code += `add address=bamgrid.com list=streaming-domains\n`;
+                code += `add address=primevideo.com list=streaming-domains\n`;
+                code += `add address=max.com list=streaming-domains\n`;
+                code += `add address=hbomax.com list=streaming-domains\n`;
             }
             if (inputs.prio_social) {
-                code += `# Dominios de Redes Sociales (Facebook, TikTok, Instagram)\n`;
+                code += `# Dominios de Redes Sociales y WhatsApp (Facebook, Instagram, TikTok, X, WhatsApp)\n`;
                 code += `add address=facebook.com list=social-domains\n`;
                 code += `add address=www.facebook.com list=social-domains\n`;
                 code += `add address=fbcdn.net list=social-domains\n`;
@@ -138,6 +146,14 @@
                 code += `add address=tiktok.com list=social-domains\n`;
                 code += `add address=tiktokv.com list=social-domains\n`;
                 code += `add address=byteoversea.com list=social-domains\n`;
+                code += `add address=ibyteimg.com list=social-domains\n`;
+                code += `add address=ibytedtos.com list=social-domains\n`;
+                code += `add address=whatsapp.com list=social-domains\n`;
+                code += `add address=whatsapp.net list=social-domains\n`;
+                code += `add address=whatsapp-cdn.net list=social-domains\n`;
+                code += `add address=x.com list=social-domains\n`;
+                code += `add address=twitter.com list=social-domains\n`;
+                code += `add address=twimg.com list=social-domains\n`;
             }
             code += `\n`;
         }
@@ -193,16 +209,16 @@
         }
 
         if (inputs.prio_streaming) {
-            code += `# 1.5 Streaming (YouTube, Netflix) (prioridad ${priority})\n`;
-            code += `add chain=prerouting dst-address-list=streaming-domains connection-mark=no-mark action=mark-connection new-connection-mark=streaming-conn passthrough=yes comment="Streaming (YouTube/Netflix)"\n`;
+            code += `# 1.5 Streaming (YouTube, Netflix, Disney+, Twitch, Prime, Max) (prioridad ${priority})\n`;
+            code += `add chain=prerouting dst-address-list=streaming-domains connection-mark=no-mark action=mark-connection new-connection-mark=streaming-conn passthrough=yes comment="Streaming (YouTube/Netflix/Disney+/Twitch)"\n`;
             code += `add chain=prerouting connection-mark=streaming-conn action=mark-packet new-packet-mark=streaming passthrough=no\n\n`;
             services.push({ name: 'STREAMING', mark: 'streaming', priority: priority, limitAtDl: streamingLimitDl, limitAtUl: streamingLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
             priority++;
         }
 
         if (inputs.prio_social) {
-            code += `# 1.6 Redes Sociales (Facebook, TikTok, Instagram) (prioridad ${priority})\n`;
-            code += `add chain=prerouting dst-address-list=social-domains connection-mark=no-mark action=mark-connection new-connection-mark=social-conn passthrough=yes comment="Redes Sociales (Facebook/TikTok)"\n`;
+            code += `# 1.6 Redes Sociales y WhatsApp (Facebook, TikTok, Instagram, X, WhatsApp) (prioridad ${priority})\n`;
+            code += `add chain=prerouting dst-address-list=social-domains connection-mark=no-mark action=mark-connection new-connection-mark=social-conn passthrough=yes comment="Redes Sociales y WhatsApp"\n`;
             code += `add chain=prerouting connection-mark=social-conn action=mark-packet new-packet-mark=social passthrough=no\n\n`;
             services.push({ name: 'SOCIAL', mark: 'social', priority: priority, limitAtDl: socialLimitDl, limitAtUl: socialLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
             priority++;
