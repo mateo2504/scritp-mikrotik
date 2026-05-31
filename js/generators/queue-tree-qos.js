@@ -12,7 +12,7 @@
             { id: "upload_total", label: "Ancho de Banda UPLOAD Total", type: "text", default: "20M", hint: "Capacidad real de subida (usa 85-90% del nominal)" },
             { id: "prio_voip", label: "Priorizar VoIP / SIP (puerto 5060, RTP, DSCP EF)", type: "checkbox", default: true, hint: "Prioridad 1 - la más alta" },
             { id: "prio_dns", label: "Priorizar DNS e ICMP (puerto 53, Ping)", type: "checkbox", default: true, hint: "Prioridad 2" },
-            { id: "prio_gaming", label: "Priorizar Gaming (Xbox, PS, Steam)", type: "checkbox", default: true, hint: "Prioridad 3" },
+            { id: "prio_gaming", label: "Priorizar Gaming (LoL, Valorant, Fortnite, Free Fire, Roblox, Steam, Consolas)", type: "checkbox", default: true, hint: "Prioridad 3 - Latencia baja para juegos de PC, móvil y consolas" },
             { id: "prio_video", label: "Priorizar Video conferencia (Zoom, Meet, Teams)", type: "checkbox", default: true, hint: "Prioridad 4" },
             { id: "prio_streaming", label: "Gestionar Streaming (YouTube, Netflix, Disney+, Prime Video, Twitch, HBO)", type: "checkbox", default: true, hint: "Prioridad 5 - Para fluidez de video" },
             { id: "prio_social", label: "Gestionar Redes Sociales y WhatsApp (Facebook, TikTok, Instagram, Twitter/X, WhatsApp)", type: "checkbox", default: true, hint: "Prioridad 6 - Redes sociales, chat y transferencia de media/archivos" },
@@ -115,10 +115,26 @@
         if (inputs.deprio_bulk) code += `# add chain=forward action=accept connection-state=established,related connection-mark=bulk-conn comment="QoS Bypass: Bulk"\n`;
         code += `\n`;
 
-        let hasAddressList = inputs.prio_streaming || inputs.prio_social;
+        let hasAddressList = inputs.prio_streaming || inputs.prio_social || inputs.prio_gaming;
         if (hasAddressList) {
             code += `# 0.5 ADDRESS LISTS para DNS Snooping (Clasificación de Dominios)\n`;
             code += `/ip firewall address-list\n`;
+            if (inputs.prio_gaming) {
+                code += `# Dominios de Gaming (Riot Games, Epic Games, Roblox, Garena Free Fire, Supercell, Steam)\n`;
+                code += `add address=riotgames.com list=gaming-domains\n`;
+                code += `add address=leagueoflegends.com list=gaming-domains\n`;
+                code += `add address=pvp.net list=gaming-domains\n`;
+                code += `add address=valorant.com list=gaming-domains\n`;
+                code += `add address=epicgames.com list=gaming-domains\n`;
+                code += `add address=fortnite.com list=gaming-domains\n`;
+                code += `add address=roblox.com list=gaming-domains\n`;
+                code += `add address=supercell.com list=gaming-domains\n`;
+                code += `add address=garena.com list=gaming-domains\n`;
+                code += `add address=ea.com list=gaming-domains\n`;
+                code += `add address=origin.com list=gaming-domains\n`;
+                code += `add address=minecraft.net list=gaming-domains\n`;
+                code += `add address=mojang.com list=gaming-domains\n`;
+            }
             if (inputs.prio_streaming) {
                 code += `# Dominios de Streaming (YouTube, Netflix, Disney+, Prime, Twitch, Max)\n`;
                 code += `add address=youtube.com list=streaming-domains\n`;
@@ -188,11 +204,13 @@
 
         if (inputs.prio_gaming) {
             code += `# 1.3 Gaming (prioridad ${priority})\n`;
-            code += `add chain=prerouting protocol=udp port=3074 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Xbox Live"\n`;
-            code += `add chain=prerouting protocol=udp port=3478-3480 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="PlayStation Network"\n`;
-            code += `add chain=prerouting protocol=udp port=27000-27050 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Steam"\n`;
-            code += `add chain=prerouting protocol=udp port=27015-27030 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Source / Valve games"\n`;
-            code += `add chain=prerouting connection-mark=gaming-conn action=mark-packet new-packet-mark=gaming passthrough=no\n\n`;
+            code += `add chain=prerouting protocol=udp port=3074,3478-3480,3658 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Xbox / PSN"\n`;
+            code += `add chain=prerouting protocol=udp port=27000-27050,27015-27030 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Steam / Source / Call of Duty"\n`;
+            code += `add chain=prerouting protocol=udp port=5000-5500,8393-8400 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Riot Games (Valorant / LoL)"\n`;
+            code += `add chain=prerouting protocol=udp port=3659,17503-17504 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="EA Games / FIFA / Apex"\n`;
+            code += `add chain=prerouting protocol=udp port=7000-8000 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Mobile Games (Free Fire)"\n`;
+            code += `add chain=prerouting dst-address-list=gaming-domains connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Gaming Domains Snooping"\n`;
+            code += `add chain=prerouting connection-mark=gaming-conn action=mark-packet new-packet-mark=gaming passthrough=no comment="Gaming Packets"\n\n`;
             services.push({ name: 'GAMING', mark: 'gaming', priority: priority, limitAtDl: gamingLimitDl, limitAtUl: gamingLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
             priority++;
         }
