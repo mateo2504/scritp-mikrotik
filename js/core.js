@@ -207,6 +207,15 @@ function renderInputs() {
             if (input.id === 'lan_address_list' && matchType !== 'src-address-list') return;
         }
 
+        if (currentScript === 'pbr') {
+            const targetType = formValues['pbr_target_type'] || 'src-address';
+            if (input.id === 'src_address' && targetType !== 'src-address') return;
+            if (input.id === 'in_interface' && targetType !== 'in-interface' && targetType !== 'port-protocol') return;
+            if (input.id === 'protocol' && targetType !== 'port-protocol') return;
+            if (input.id === 'dst_port' && targetType !== 'port-protocol') return;
+            if (input.id === 'method_v7' && targetType === 'port-protocol') return;
+        }
+
         const group = document.createElement('div');
         const storedVal = formValues[`${currentScript}_${input.id}`];
         const val = storedVal !== undefined ? storedVal : (input.default !== undefined ? input.default : '');
@@ -243,7 +252,7 @@ function renderInputs() {
             const select = group.querySelector('select');
             select.addEventListener('change', () => {
                 formValues[`${currentScript}_${input.id}`] = select.value;
-                if (input.id === 'wan_count' || input.id === 'lan_match_type' || input.id === 'recursive_routes') {
+                if (input.id === 'wan_count' || input.id === 'lan_match_type' || input.id === 'recursive_routes' || input.id === 'target_type') {
                     renderInputs();
                 }
                 updateScript();
