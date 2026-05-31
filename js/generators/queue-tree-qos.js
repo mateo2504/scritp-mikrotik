@@ -1,19 +1,21 @@
-// Queue Tree + PCQ - QoS por servicio (VoIP, gaming, normal, bulk) con reparto equitativo.
+// Queue Tree + PCQ - QoS por servicio (VoIP, gaming, streaming, redes sociales, normal, bulk) con reparto equitativo.
 (function () {
     const definition = {
         key: 'queue-tree-qos',
         title: "Queue Tree + PCQ (QoS por Servicio)",
-        description: "QoS profesional: clasifica tráfico por tipo de servicio (VoIP, DNS, gaming, navegación, bulk) con prioridades y reparte el ancho de banda equitativamente entre usuarios con PCQ.",
+        description: "QoS profesional: clasifica tráfico por tipo de servicio (VoIP, DNS/Ping, gaming, streaming, redes sociales, navegación, bulk) con prioridades y reparte el ancho de banda equitativamente entre usuarios con PCQ.",
         fileName: "mikrotik_queue_tree_qos.rsc",
         inputs: [
             { id: "wan_interface", label: "Interfaz WAN", type: "text", default: "ether1", hint: "Interfaz por donde sale tu Internet" },
             { id: "lan_interface", label: "Interfaz LAN", type: "text", default: "bridge-lan", hint: "Bridge o interfaz de la red local" },
             { id: "download_total", label: "Ancho de Banda DOWNLOAD Total", type: "text", default: "100M", hint: "Capacidad real de tu Internet de bajada (usa 85-90% del nominal)" },
             { id: "upload_total", label: "Ancho de Banda UPLOAD Total", type: "text", default: "20M", hint: "Capacidad real de subida (usa 85-90% del nominal)" },
-            { id: "prio_voip", label: "Priorizar VoIP / SIP (puerto 5060, RTP)", type: "checkbox", default: true, hint: "Prioridad 1 - la más alta" },
-            { id: "prio_dns", label: "Priorizar DNS (puerto 53)", type: "checkbox", default: true, hint: "Prioridad 2" },
+            { id: "prio_voip", label: "Priorizar VoIP / SIP (puerto 5060, RTP, DSCP EF)", type: "checkbox", default: true, hint: "Prioridad 1 - la más alta" },
+            { id: "prio_dns", label: "Priorizar DNS e ICMP (puerto 53, Ping)", type: "checkbox", default: true, hint: "Prioridad 2" },
             { id: "prio_gaming", label: "Priorizar Gaming (Xbox, PS, Steam)", type: "checkbox", default: true, hint: "Prioridad 3" },
             { id: "prio_video", label: "Priorizar Video conferencia (Zoom, Meet, Teams)", type: "checkbox", default: true, hint: "Prioridad 4" },
+            { id: "prio_streaming", label: "Gestionar Streaming (YouTube, Netflix)", type: "checkbox", default: true, hint: "Prioridad 5 - Para fluidez de video" },
+            { id: "prio_social", label: "Gestionar Redes Sociales (Facebook, TikTok, Instagram)", type: "checkbox", default: true, hint: "Prioridad 6 - Tráfico pesado en ráfagas" },
             { id: "deprio_bulk", label: "Penalizar descargas masivas (>50MB en una conexión)", type: "checkbox", default: true, hint: "Prioridad 8 (la más baja). Heurística por bytes." },
             { id: "use_pcq", label: "Repartir equitativamente entre usuarios (PCQ)", type: "checkbox", default: true, hint: "Si un usuario satura la línea, comparte entre todos los activos" }
         ]
@@ -77,6 +79,12 @@
         const videoLimitDl = calcLimit(dlBits, 0.15, 1000, 10000);
         const videoLimitUl = calcLimit(ulBits, 0.15, 512, 5000);
 
+        const streamingLimitDl = calcLimit(dlBits, 0.20, 2000, 20000);
+        const streamingLimitUl = calcLimit(ulBits, 0.20, 512, 5000);
+
+        const socialLimitDl = calcLimit(dlBits, 0.10, 1000, 10000);
+        const socialLimitUl = calcLimit(ulBits, 0.10, 256, 2000);
+
         const normalLimitDl = calcLimit(dlBits, 0.30, 2000, 20000);
         const normalLimitUl = calcLimit(ulBits, 0.30, 512, 5000);
 
@@ -101,9 +109,38 @@
         if (inputs.prio_dns) code += `# add chain=forward action=accept connection-state=established,related packet-mark=dns comment="QoS Bypass: DNS/Ping"\n`;
         if (inputs.prio_gaming) code += `# add chain=forward action=accept connection-state=established,related connection-mark=gaming-conn comment="QoS Bypass: Gaming"\n`;
         if (inputs.prio_video) code += `# add chain=forward action=accept connection-state=established,related connection-mark=video-conn comment="QoS Bypass: Video"\n`;
+        if (inputs.prio_streaming) code += `# add chain=forward action=accept connection-state=established,related connection-mark=streaming-conn comment="QoS Bypass: Streaming"\n`;
+        if (inputs.prio_social) code += `# add chain=forward action=accept connection-state=established,related connection-mark=social-conn comment="QoS Bypass: Social Media"\n`;
         code += `# add chain=forward action=accept connection-state=established,related connection-mark=normal-conn comment="QoS Bypass: Normal"\n`;
         if (inputs.deprio_bulk) code += `# add chain=forward action=accept connection-state=established,related connection-mark=bulk-conn comment="QoS Bypass: Bulk"\n`;
         code += `\n`;
+
+        let hasAddressList = inputs.prio_streaming || inputs.prio_social;
+        if (hasAddressList) {
+            code += `# 0.5 ADDRESS LISTS para DNS Snooping (Clasificación de Dominios)\n`;
+            code += `/ip firewall address-list\n`;
+            if (inputs.prio_streaming) {
+                code += `# Dominios de Streaming (YouTube, Netflix)\n`;
+                code += `add address=youtube.com list=streaming-domains\n`;
+                code += `add address=www.youtube.com list=streaming-domains\n`;
+                code += `add address=googlevideo.com list=streaming-domains\n`;
+                code += `add address=ytimg.com list=streaming-domains\n`;
+                code += `add address=netflix.com list=streaming-domains\n`;
+                code += `add address=nflxvideo.net list=streaming-domains\n`;
+            }
+            if (inputs.prio_social) {
+                code += `# Dominios de Redes Sociales (Facebook, TikTok, Instagram)\n`;
+                code += `add address=facebook.com list=social-domains\n`;
+                code += `add address=www.facebook.com list=social-domains\n`;
+                code += `add address=fbcdn.net list=social-domains\n`;
+                code += `add address=instagram.com list=social-domains\n`;
+                code += `add address=cdninstagram.com list=social-domains\n`;
+                code += `add address=tiktok.com list=social-domains\n`;
+                code += `add address=tiktokv.com list=social-domains\n`;
+                code += `add address=byteoversea.com list=social-domains\n`;
+            }
+            code += `\n`;
+        }
 
         code += `# 1. MANGLE: clasificar el tráfico marcando paquetes según tipo de servicio\n`;
         code += `# Se usan dos pasos: mark-connection (más eficiente) -> mark-packet\n`;
@@ -155,13 +192,29 @@
             priority++;
         }
 
+        if (inputs.prio_streaming) {
+            code += `# 1.5 Streaming (YouTube, Netflix) (prioridad ${priority})\n`;
+            code += `add chain=prerouting dst-address-list=streaming-domains connection-mark=no-mark action=mark-connection new-connection-mark=streaming-conn passthrough=yes comment="Streaming (YouTube/Netflix)"\n`;
+            code += `add chain=prerouting connection-mark=streaming-conn action=mark-packet new-packet-mark=streaming passthrough=no\n\n`;
+            services.push({ name: 'STREAMING', mark: 'streaming', priority: priority, limitAtDl: streamingLimitDl, limitAtUl: streamingLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
+            priority++;
+        }
+
+        if (inputs.prio_social) {
+            code += `# 1.6 Redes Sociales (Facebook, TikTok, Instagram) (prioridad ${priority})\n`;
+            code += `add chain=prerouting dst-address-list=social-domains connection-mark=no-mark action=mark-connection new-connection-mark=social-conn passthrough=yes comment="Redes Sociales (Facebook/TikTok)"\n`;
+            code += `add chain=prerouting connection-mark=social-conn action=mark-packet new-packet-mark=social passthrough=no\n\n`;
+            services.push({ name: 'SOCIAL', mark: 'social', priority: priority, limitAtDl: socialLimitDl, limitAtUl: socialLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
+            priority++;
+        }
+
         if (inputs.deprio_bulk) {
-            code += `# 1.5 Bulk: descargas grandes (heurística: conexiones que ya cargaron >50MB)\n`;
+            code += `# 1.7 Bulk: descargas grandes (heurística: conexiones que ya cargaron >50MB)\n`;
             code += `add chain=prerouting connection-bytes=50000000-0 protocol=tcp connection-mark=no-mark action=mark-connection new-connection-mark=bulk-conn passthrough=yes comment="Bulk transfer (>50MB)"\n`;
             code += `add chain=prerouting connection-mark=bulk-conn action=mark-packet new-packet-mark=bulk passthrough=no\n\n`;
         }
 
-        code += `# 1.6 Resto del tráfico = navegación normal (prioridad ${priority})\n`;
+        code += `# 1.8 Resto del tráfico = navegación normal (prioridad ${priority})\n`;
         code += `add chain=prerouting connection-mark=no-mark action=mark-connection new-connection-mark=normal-conn passthrough=yes comment="Tránsito Normal"\n`;
         code += `add chain=prerouting connection-mark=normal-conn action=mark-packet new-packet-mark=normal passthrough=no comment="Tráfico normal"\n\n`;
         services.push({ name: 'NORMAL', mark: 'normal', priority: priority, limitAtDl: normalLimitDl, limitAtUl: normalLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
