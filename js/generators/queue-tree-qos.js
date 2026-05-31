@@ -19,6 +19,41 @@
         ]
     };
 
+    function parseBandwidth(val) {
+        if (!val) return 0;
+        const clean = val.toString().toUpperCase().trim();
+        let multiplier = 1;
+        let numStr = clean;
+        if (clean.endsWith('G')) {
+            multiplier = 1000000000;
+            numStr = clean.slice(0, -1);
+        } else if (clean.endsWith('M')) {
+            multiplier = 1000000;
+            numStr = clean.slice(0, -1);
+        } else if (clean.endsWith('K')) {
+            multiplier = 1000;
+            numStr = clean.slice(0, -1);
+        }
+        const num = parseFloat(numStr);
+        return isNaN(num) ? 0 : num * multiplier;
+    }
+
+    function formatBandwidth(bits) {
+        if (bits >= 1000000000) return `${Math.round(bits / 1000000000)}G`;
+        if (bits >= 1000000) return `${Math.round(bits / 1000000)}M`;
+        if (bits >= 1000) return `${Math.round(bits / 1000)}k`;
+        return `${bits}`;
+    }
+
+    // Calcula un limit-at proporcional y seguro para evitar saturar el Queue Padre
+    function calcLimit(totalBits, pct, minKbps, maxKbps) {
+        let val = totalBits * pct;
+        if (val < minKbps * 1000) val = minKbps * 1000;
+        if (val > maxKbps * 1000) val = maxKbps * 1000;
+        if (val > totalBits * 0.5) val = totalBits * 0.1; // Ajuste si la red es demasiado lenta
+        return formatBandwidth(val);
+    }
+
     function generate(inputs, version) {
         const wan = inputs.wan_interface || 'ether1';
         const lan = inputs.lan_interface || 'bridge-lan';
@@ -27,15 +62,48 @@
         const queueDl = inputs.use_pcq ? 'pcq-download' : 'default';
         const queueUl = inputs.use_pcq ? 'pcq-upload' : 'default';
 
+        const dlBits = parseBandwidth(dl);
+        const ulBits = parseBandwidth(ul);
+
+        const voipLimitDl = calcLimit(dlBits, 0.05, 256, 2000);
+        const voipLimitUl = calcLimit(ulBits, 0.05, 128, 1000);
+
+        const dnsLimitDl = calcLimit(dlBits, 0.02, 128, 1000);
+        const dnsLimitUl = calcLimit(ulBits, 0.02, 64, 500);
+
+        const gamingLimitDl = calcLimit(dlBits, 0.10, 512, 5000);
+        const gamingLimitUl = calcLimit(ulBits, 0.10, 256, 2000);
+
+        const videoLimitDl = calcLimit(dlBits, 0.15, 1000, 10000);
+        const videoLimitUl = calcLimit(ulBits, 0.15, 512, 5000);
+
+        const normalLimitDl = calcLimit(dlBits, 0.30, 2000, 20000);
+        const normalLimitUl = calcLimit(ulBits, 0.30, 512, 5000);
+
+        const bulkLimitDl = calcLimit(dlBits, 0.01, 64, 512);
+        const bulkLimitUl = calcLimit(ulBits, 0.01, 32, 256);
+
         let code = `# ====================================================\n`;
         code += `# SCRIPT: Queue Tree + PCQ con clasificación por servicio\n`;
         code += `# RouterOS Version: ${version.toUpperCase()}\n`;
         code += `# Generado: ${new Date().toLocaleDateString()}\n`;
-        code += `# DOWNLOAD: ${dl}  |  UPLOAD: ${ul}\n`;
+        code += `# DOWNLOAD: ${dl} (Garantizado min VoIP/DNS) | UPLOAD: ${ul}\n`;
         code += `# ====================================================\n`;
-        code += `# ADVERTENCIA: Para que esto funcione, DESACTIVA FastTrack en /ip firewall filter.\n`;
-        code += `# FastTrack se salta mangle y rompe queue tree.\n`;
+        code += `# ADVERTENCIA: Para que esto funcione, debes DESACTIVAR FastTrack\n`;
+        code += `# o colocar reglas de Bypass de FastTrack antes de la regla principal.\n`;
         code += `# ====================================================\n\n`;
+
+        code += `# 0. REGALAS RECOMENDADAS PARA BYPASS DE FASTTRACK (Filtro)\n`;
+        code += `# Coloca estas reglas en '/ip firewall filter' JUSTO ANTES de la regla de FastTrack\n`;
+        code += `# para que el tráfico marcado para QoS no sea puenteado por el kernel.\n`;
+        code += `# /ip firewall filter\n`;
+        if (inputs.prio_voip) code += `# add chain=forward action=accept connection-state=established,related connection-mark=voip-conn comment="QoS Bypass: VoIP"\n`;
+        if (inputs.prio_dns) code += `# add chain=forward action=accept connection-state=established,related packet-mark=dns comment="QoS Bypass: DNS/Ping"\n`;
+        if (inputs.prio_gaming) code += `# add chain=forward action=accept connection-state=established,related connection-mark=gaming-conn comment="QoS Bypass: Gaming"\n`;
+        if (inputs.prio_video) code += `# add chain=forward action=accept connection-state=established,related connection-mark=video-conn comment="QoS Bypass: Video"\n`;
+        code += `# add chain=forward action=accept connection-state=established,related connection-mark=normal-conn comment="QoS Bypass: Normal"\n`;
+        if (inputs.deprio_bulk) code += `# add chain=forward action=accept connection-state=established,related connection-mark=bulk-conn comment="QoS Bypass: Bulk"\n`;
+        code += `\n`;
 
         code += `# 1. MANGLE: clasificar el tráfico marcando paquetes según tipo de servicio\n`;
         code += `# Se usan dos pasos: mark-connection (más eficiente) -> mark-packet\n`;
@@ -45,19 +113,23 @@
         const services = [];
 
         if (inputs.prio_voip) {
-            code += `# 1.1 VoIP / SIP (prioridad ${priority})\n`;
+            code += `# 1.1 VoIP / SIP & DSCP EF (prioridad ${priority})\n`;
             code += `add chain=prerouting protocol=udp port=5060,5061,3478,3479 connection-mark=no-mark action=mark-connection new-connection-mark=voip-conn passthrough=yes comment="VoIP SIP/STUN"\n`;
             code += `add chain=prerouting protocol=udp port=10000-20000 connection-mark=no-mark dst-address-type=!local action=mark-connection new-connection-mark=voip-conn passthrough=yes comment="VoIP RTP"\n`;
+            code += `add chain=prerouting dscp=46 connection-mark=no-mark action=mark-connection new-connection-mark=voip-conn passthrough=yes comment="VoIP DSCP EF"\n`;
             code += `add chain=prerouting connection-mark=voip-conn action=mark-packet new-packet-mark=voip passthrough=no comment="VoIP packets"\n\n`;
-            services.push({ name: 'VOIP', mark: 'voip', priority: priority, limitAtDl: '500k', limitAtUl: '500k' });
+            // Las colas VoIP usan default-small para saltarse el retraso de encolamiento de PCQ
+            services.push({ name: 'VOIP', mark: 'voip', priority: priority, limitAtDl: voipLimitDl, limitAtUl: voipLimitUl, qTypeDl: 'default-small', qTypeUl: 'default-small' });
             priority++;
         }
 
         if (inputs.prio_dns) {
-            code += `# 1.2 DNS (prioridad ${priority})\n`;
+            code += `# 1.2 DNS & ICMP Ping (prioridad ${priority})\n`;
             code += `add chain=prerouting protocol=udp port=53 action=mark-packet new-packet-mark=dns passthrough=no comment="DNS UDP"\n`;
-            code += `add chain=prerouting protocol=tcp port=53 action=mark-packet new-packet-mark=dns passthrough=no comment="DNS TCP"\n\n`;
-            services.push({ name: 'DNS', mark: 'dns', priority: priority, limitAtDl: '1M', limitAtUl: '500k' });
+            code += `add chain=prerouting protocol=tcp port=53 action=mark-packet new-packet-mark=dns passthrough=no comment="DNS TCP"\n`;
+            code += `add chain=prerouting protocol=icmp action=mark-packet new-packet-mark=dns passthrough=no comment="ICMP (Ping)"\n\n`;
+            // DNS usa default-small para una respuesta instantánea
+            services.push({ name: 'DNS', mark: 'dns', priority: priority, limitAtDl: dnsLimitDl, limitAtUl: dnsLimitUl, qTypeDl: 'default-small', qTypeUl: 'default-small' });
             priority++;
         }
 
@@ -68,17 +140,18 @@
             code += `add chain=prerouting protocol=udp port=27000-27050 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Steam"\n`;
             code += `add chain=prerouting protocol=udp port=27015-27030 connection-mark=no-mark action=mark-connection new-connection-mark=gaming-conn passthrough=yes comment="Source / Valve games"\n`;
             code += `add chain=prerouting connection-mark=gaming-conn action=mark-packet new-packet-mark=gaming passthrough=no\n\n`;
-            services.push({ name: 'GAMING', mark: 'gaming', priority: priority, limitAtDl: '2M', limitAtUl: '2M' });
+            services.push({ name: 'GAMING', mark: 'gaming', priority: priority, limitAtDl: gamingLimitDl, limitAtUl: gamingLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
             priority++;
         }
 
         if (inputs.prio_video) {
-            code += `# 1.4 Video conferencia (prioridad ${priority})\n`;
+            code += `# 1.4 Video conferencia y DSCP AF4 (prioridad ${priority})\n`;
             code += `add chain=prerouting protocol=udp port=8801-8810 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Zoom"\n`;
             code += `add chain=prerouting protocol=udp port=3478,19302-19309 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Google Meet / STUN"\n`;
             code += `add chain=prerouting protocol=udp port=50000-50059 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Teams"\n`;
+            code += `add chain=prerouting dscp=34,36,38 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Video DSCP AF4"\n`;
             code += `add chain=prerouting connection-mark=video-conn action=mark-packet new-packet-mark=video passthrough=no\n\n`;
-            services.push({ name: 'VIDEO', mark: 'video', priority: priority, limitAtDl: '3M', limitAtUl: '2M' });
+            services.push({ name: 'VIDEO', mark: 'video', priority: priority, limitAtDl: videoLimitDl, limitAtUl: videoLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
             priority++;
         }
 
@@ -89,11 +162,12 @@
         }
 
         code += `# 1.6 Resto del tráfico = navegación normal (prioridad ${priority})\n`;
-        code += `add chain=prerouting connection-mark=no-mark action=mark-packet new-packet-mark=normal passthrough=no comment="Tráfico normal"\n\n`;
-        services.push({ name: 'NORMAL', mark: 'normal', priority: priority, limitAtDl: '5M', limitAtUl: '1M' });
+        code += `add chain=prerouting connection-mark=no-mark action=mark-connection new-connection-mark=normal-conn passthrough=yes comment="Tránsito Normal"\n`;
+        code += `add chain=prerouting connection-mark=normal-conn action=mark-packet new-packet-mark=normal passthrough=no comment="Tráfico normal"\n\n`;
+        services.push({ name: 'NORMAL', mark: 'normal', priority: priority, limitAtDl: normalLimitDl, limitAtUl: normalLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
 
         if (inputs.deprio_bulk) {
-            services.push({ name: 'BULK', mark: 'bulk', priority: 8, limitAtDl: '256k', limitAtUl: '128k' });
+            services.push({ name: 'BULK', mark: 'bulk', priority: 8, limitAtDl: bulkLimitDl, limitAtUl: bulkLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
         }
 
         if (inputs.use_pcq) {
@@ -112,24 +186,24 @@
 
         code += `# 3.2 Queues hijo por servicio (ordenados por prioridad)\n`;
         services.forEach(s => {
-            code += `add name=DL-${s.name} parent=DOWNLOAD packet-mark=${s.mark} limit-at=${s.limitAtDl} max-limit=${dl} priority=${s.priority} queue=${queueDl} comment="Download ${s.name}"\n`;
+            code += `add name=DL-${s.name} parent=DOWNLOAD packet-mark=${s.mark} limit-at=${s.limitAtDl} max-limit=${dl} priority=${s.priority} queue=${s.qTypeDl} comment="Download ${s.name}"\n`;
         });
         code += `\n`;
         services.forEach(s => {
-            code += `add name=UL-${s.name} parent=UPLOAD packet-mark=${s.mark} limit-at=${s.limitAtUl} max-limit=${ul} priority=${s.priority} queue=${queueUl} comment="Upload ${s.name}"\n`;
+            code += `add name=UL-${s.name} parent=UPLOAD packet-mark=${s.mark} limit-at=${s.limitAtUl} max-limit=${ul} priority=${s.priority} queue=${s.qTypeUl} comment="Upload ${s.name}"\n`;
         });
         code += `\n`;
 
         code += `# ====================================================\n`;
         code += `# NOTAS\n`;
-        code += `# - 'limit-at' = velocidad garantizada en condiciones de saturación.\n`;
+        code += `# - 'limit-at' = velocidad garantizada calculada proporcionalmente para evitar saturaciones.\n`;
         code += `# - 'max-limit' = techo absoluto (toma todo lo libre si nadie compite).\n`;
         code += `# - 'priority' 1 (alta) -> 8 (baja). Servicios críticos primero.\n`;
         if (inputs.use_pcq) {
             code += `# - PCQ con pcq-rate=0 reparte AUTOMÁTICAMENTE entre los clientes activos.\n`;
+            code += `# - Colas VoIP y DNS usan el tipo de cola 'default-small' y se saltan PCQ para evitar jitter.\n`;
         }
-        code += `# - IMPORTANTE: si activas el firewall con FastTrack, desactiva esa regla,\n`;
-        code += `#   o el QoS no funcionará (FastTrack salta el mangle).\n`;
+        code += `# - IMPORTANTE: Puedes usar las reglas de bypass de FastTrack del Paso 0 o desactivar FastTrack.\n`;
         code += `# ====================================================\n`;
         code += `# MONITORIZAR:\n`;
         code += `#   /queue tree print stats        (ver bytes/rate por cola)\n`;
