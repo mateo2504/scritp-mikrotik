@@ -227,6 +227,18 @@ function renderInputs() {
             if (!usePriorityLimitAt && priorityFields.includes(input.id)) return;
         }
 
+        if (currentScript === 'public-ip') {
+            const method = formValues['public-ip_method'] !== undefined ? formValues['public-ip_method'] : 'nat11';
+            
+            const natFields = ['client_private_ip', 'server_wan'];
+            const routedFields = ['subnet_mask', 'gateway_ip'];
+            const pppoeFields = ['pppoe_user', 'pppoe_pass', 'pppoe_service'];
+            
+            if (method !== 'nat11' && natFields.includes(input.id)) return;
+            if (method !== 'routed' && routedFields.includes(input.id)) return;
+            if (method !== 'pppoe' && pppoeFields.includes(input.id)) return;
+        }
+
         const group = document.createElement('div');
         const storedVal = formValues[`${currentScript}_${input.id}`];
         const val = storedVal !== undefined ? storedVal : (input.default !== undefined ? input.default : '');
@@ -266,7 +278,7 @@ function renderInputs() {
             const select = group.querySelector('select');
             select.addEventListener('change', () => {
                 formValues[`${currentScript}_${input.id}`] = select.value;
-                if (input.id === 'wan_count' || input.id === 'lan_match_type' || input.id === 'recursive_routes' || input.id === 'target_type') {
+                if (input.id === 'wan_count' || input.id === 'lan_match_type' || input.id === 'recursive_routes' || input.id === 'target_type' || input.id === 'method') {
                     renderInputs();
                 }
                 updateScript();
