@@ -18,8 +18,8 @@
             { id: "block_amplification", label: "Bloquear puertos de amplificación / reflexión DDoS", type: "checkbox", default: true, hint: "NTP, SSDP, SNMP, Chargen, CLDAP, Memcached: evita que tu red sea usada como reflector en ataques" },
             { id: "block_openresolver", label: "Bloquear DNS abierto / amplificación DNS (Puerto 53)", type: "checkbox", default: true, hint: "Impide que tus clientes sean usados como open resolvers (listas DDoS)" },
             { id: "anti_spoof", label: "Anti-Spoofing (descartar IPs de origen falsas / bogon)", type: "checkbox", default: true, hint: "Evita tráfico con IP de origen falsificada (spoofing) en ambos sentidos" },
-            { id: "detect_flood", label: "Detectar y banear clientes infectados (flood de conexiones)", type: "checkbox", default: true, hint: "Cuenta conexiones simultáneas por cliente y banea temporalmente a los que se disparan" },
-            { id: "conn_limit", label: "Límite de conexiones simultáneas por cliente", type: "text", default: "100", hint: "Si un cliente supera este número se considera infectado (bot/scanner)" },
+            { id: "detect_flood", label: "Detectar y banear clientes infectados (flood de conexiones)", type: "checkbox", default: true, hint: "Detecta bots/escáneres por TASA de conexiones nuevas por segundo (no por total abierto) para no banear hogares normales" },
+            { id: "conn_limit", label: "Conexiones nuevas por segundo por cliente (umbral)", type: "text", default: "50", hint: "Tasa sostenida que delata un bot/escáner. Un hogar normal rara vez supera 50/seg; un host infectado abre cientos/seg" },
             { id: "ban_time", label: "Tiempo de baneo del cliente infectado", type: "text", default: "1h" },
             { id: "notify_log", label: "Registrar eventos en el log del router", type: "checkbox", default: true }
         ]
@@ -132,9 +132,13 @@
             code += `add chain=forward action=drop protocol=tcp in-interface=${wan} dst-port=53 comment="Anti-BL: drop open resolver TCP hacia clientes"\n`;
         }
         if (inputs.detect_flood) {
-            code += `add chain=forward action=add-src-to-address-list connection-state=new src-address=${lan} out-interface=${wan} \\\n`;
-            code += `    connection-limit=${connLimit},32 address-list=infectados address-list-timeout=${banTime}${logFlood} comment="Anti-BL: marcar cliente con flood de conexiones"\n`;
-            code += `add chain=forward action=drop src-address-list=infectados comment="Anti-BL: bloquear clientes infectados (saliente)"\n`;
+            const rate = parseInt(connLimit) > 0 ? parseInt(connLimit) : 50;
+            const burst = rate * 2;
+            code += `# Detección de bots/escáneres por TASA de conexiones nuevas/seg (NO por total abierto:\n`;
+            code += `# así un hogar con cientos de conexiones simultáneas legítimas NO se banea)\n`;
+            code += `add chain=forward action=drop src-address-list=infectados comment="Anti-BL: bloquear clientes ya detectados (saliente)"\n`;
+            code += `add chain=forward action=accept connection-state=new protocol=tcp src-address=${lan} out-interface=${wan} limit=${rate},${burst}:packet comment="Anti-BL: tasa normal de conexiones nuevas (deja pasar)"\n`;
+            code += `add chain=forward action=add-src-to-address-list connection-state=new protocol=tcp src-address=${lan} out-interface=${wan} address-list=infectados address-list-timeout=${banTime}${logFlood} comment="Anti-BL: exceso de tasa = posible bot/escáner"\n`;
         }
         if (fw) {
             code += `add chain=forward action=accept in-interface=${lanIf} comment="Permitir salida de LAN a Internet"\n`;
@@ -167,8 +171,15 @@
         }
         code += `#  - Verifica tu IP pública en: https://check.spamhaus.org y https://mxtoolbox.com/blacklists.aspx\n`;
         code += `#  - Mantén también una blocklist entrante (FireHOL/Spamhaus) y Anti Brute-Force.\n`;
+        if (fw && inputs.enable_fasttrack) {
+            code += `#  - RENDIMIENTO: si la velocidad baja, confirma que FastTrack tiene tráfico:\n`;
+            code += `#    /ip firewall filter print stats where action=fasttrack-connection\n`;
+            code += `#    Recuerda: FastTrack se rompe si activas Mangle/PCC/Simple Queues.\n`;
+        }
         if (inputs.detect_flood) {
-            code += `#  - Revisa los clientes detectados con: /ip firewall address-list print where list=infectados\n`;
+            code += `#  - La detección usa TASA de conexiones nuevas/seg, no total abierto: no banea hogares normales.\n`;
+            code += `#  - Revisa/limpia detectados con: /ip firewall address-list print where list=infectados\n`;
+            code += `#    Si aparece un cliente legítimo, sube el umbral de conexiones nuevas/seg.\n`;
         }
         code += `# ====================================================\n`;
 
