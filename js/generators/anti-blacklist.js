@@ -50,19 +50,33 @@
         }
         code += `# ====================================================\n\n`;
 
-        // Bogons address-list (used by anti-spoofing)
+        // Anti-spoofing: RFC6890 address-lists + RAW prerouting (modelo "Building Advanced Firewall")
         if (inputs.anti_spoof) {
-            code += `# Lista de redes BOGON / reservadas (origen ilegítimo = spoofing)\n`;
+            code += `# Listas RFC6890 (modelo oficial "Building Advanced Firewall" de MikroTik)\n`;
             code += `/ip firewall address-list\n`;
-            const bogons = [
-                "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
-                "169.254.0.0/16", "172.16.0.0/12", "192.0.0.0/24", "192.0.2.0/24",
-                "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24",
-                "224.0.0.0/4", "240.0.0.0/4"
-            ];
-            bogons.forEach(b => {
-                code += `add list=BOGONS address=${b} comment="Anti-Blacklist bogon"\n`;
-            });
+            // No válidas ni como origen ni como destino
+            const badIpv4 = ["127.0.0.0/8", "192.0.0.0/24", "192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4"];
+            badIpv4.forEach(a => { code += `add list=bad_ipv4 address=${a} comment="RFC6890"\n`; });
+            // No válidas como ORIGEN
+            ["0.0.0.0/8", "255.255.255.255/32"].forEach(a => { code += `add list=bad_src_ipv4 address=${a} comment="RFC6890"\n`; });
+            // No válidas como DESTINO
+            ["0.0.0.0/8", "224.0.0.0/4"].forEach(a => { code += `add list=bad_dst_ipv4 address=${a} comment="RFC6890"\n`; });
+            // No enrutables globalmente (spoofing si llegan como origen desde la WAN)
+            const notGlobal = ["0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "169.254.0.0/16", "172.16.0.0/12",
+                "192.0.0.0/24", "192.0.2.0/24", "192.168.0.0/16", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "255.255.255.255/32"];
+            notGlobal.forEach(a => { code += `add list=not_global_ipv4 address=${a} comment="RFC6890"\n`; });
+            code += `\n`;
+
+            code += `# ====================================================\n`;
+            code += `# TABLA RAW (prerouting): descarta bogons/spoofing ANTES del connection\n`;
+            code += `# tracking. Más eficiente y protege la CPU/conntrack bajo ataque.\n`;
+            code += `# ====================================================\n`;
+            code += `/ip firewall raw\n`;
+            code += `add chain=prerouting action=drop src-address-list=bad_ipv4 comment="Anti-BL: drop bogon (origen)"\n`;
+            code += `add chain=prerouting action=drop dst-address-list=bad_ipv4 comment="Anti-BL: drop bogon (destino)"\n`;
+            code += `add chain=prerouting action=drop src-address-list=bad_src_ipv4 comment="Anti-BL: origen inválido"\n`;
+            code += `add chain=prerouting action=drop dst-address-list=bad_dst_ipv4 comment="Anti-BL: destino inválido"\n`;
+            code += `add chain=prerouting action=drop in-interface=${wan} src-address-list=not_global_ipv4 comment="Anti-BL: drop no-global desde WAN (spoofing entrante)"\n`;
             code += `\n`;
         }
 
@@ -76,9 +90,6 @@
             code += `add chain=input action=accept connection-state=established,related,untracked comment="Aceptar establecidas/relacionadas"\n`;
             code += `add chain=input action=drop connection-state=invalid comment="Descartar inválidas"\n`;
             code += `add chain=input action=accept protocol=icmp comment="Permitir ICMP (ping)"\n`;
-        }
-        if (inputs.anti_spoof) {
-            code += `add chain=input action=drop in-interface=${wan} src-address-list=BOGONS comment="Anti-BL: drop bogon source (router)"\n`;
         }
         if (inputs.block_amplification) {
             code += `add chain=input action=drop protocol=udp in-interface=${wan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión (router)"\n`;
@@ -115,7 +126,7 @@
             code += `add chain=forward action=drop connection-state=invalid comment="Descartar inválidas"\n`;
         }
         if (inputs.anti_spoof) {
-            code += `add chain=forward action=drop in-interface=${wan} src-address-list=BOGONS comment="Anti-BL: drop bogon source (entrante)"\n`;
+            code += `# Egress anti-spoofing (BCP38): un cliente solo puede salir con su propio rango\n`;
             code += `add chain=forward action=drop out-interface=${wan} src-address=!${lan} comment="Anti-BL: drop spoofed source (saliente)"\n`;
         }
         if (inputs.block_smtp) {
@@ -158,7 +169,8 @@
 
         // ============ Notes ============
         if (inputs.anti_spoof) {
-            code += `# Refuerzo recomendado (RouterOS): activa Reverse Path Filtering\n`;
+            code += `# El filtrado de bogons se hace en RAW (prerouting), antes del conntrack.\n`;
+            code += `# Refuerzo adicional (RouterOS): activa Reverse Path Filtering\n`;
             code += `# /ip settings set rp-filter=loose\n`;
         }
         code += `# ====================================================\n`;
