@@ -3,11 +3,16 @@
     const definition = {
         key: 'anti-blacklist',
         title: "Anti-Blacklist ISP / WISP (IP Pública)",
-        description: "Protege tu rango de IPs públicas de caer en listas negras (Spamhaus, DNSBL, listas anti-DDoS). Bloquea spambots, reflexión/amplificación, spoofing, resolvers DNS abiertos y clientes infectados.",
+        description: "Protege tu rango de IPs públicas de caer en listas negras (Spamhaus, DNSBL, listas anti-DDoS). Bloquea spambots, reflexión/amplificación, spoofing, resolvers DNS abiertos y clientes infectados. Incluye firewall básico opcional.",
         fileName: "mikrotik_anti_blacklist.rsc",
         inputs: [
             { id: "wan_interface", label: "Interfaz / Lista WAN (Salida a Internet)", type: "text", default: "ether1", hint: "Interfaz o interface-list de salida (ej: ether1 o WAN)" },
             { id: "lan_subnet", label: "Rango de Clientes (LAN / Pool Público)", type: "text", default: "192.168.0.0/16", hint: "Subred CIDR de tus clientes. Si entregas IP pública directa, pon ese rango (ej: 45.10.20.0/24)" },
+            { id: "include_firewall", label: "Incluir Firewall Básico recomendado", type: "checkbox", default: true, hint: "Agrega las reglas base (input/forward seguros + NAT masquerade) ya integradas en el orden correcto" },
+            { id: "lan_interface", label: "Interfaz LAN (para Firewall Básico)", type: "text", default: "bridge-lan", hint: "Solo se usa si activas el Firewall Básico. Interfaz o lista de tu red local" },
+            { id: "enable_fasttrack", label: "Activar FastTrack (Firewall Básico)", type: "checkbox", default: true, hint: "Acelera el tráfico TCP. ¡Desactívalo si usas PCC o Simple Queues!" },
+            { id: "allow_winbox", label: "Permitir Winbox desde WAN (Firewall Básico)", type: "checkbox", default: false, hint: "Abre el puerto de administración a Internet. Se recomienda restringir por address-list" },
+            { id: "winbox_port", label: "Puerto Winbox", type: "text", default: "8291" },
             { id: "block_smtp", label: "Bloquear SMTP saliente (Puerto 25) — Anti-Spam", type: "checkbox", default: true, hint: "Causa #1 de blacklist DNSBL: spambots de clientes infectados enviando correo directo" },
             { id: "mail_server", label: "IP de Servidor de Correo Autorizado (opcional)", type: "text", default: "", hint: "Esta IP sí podrá usar el puerto 25. Déjalo vacío si ningún cliente envía correo directo" },
             { id: "block_amplification", label: "Bloquear puertos de amplificación / reflexión DDoS", type: "checkbox", default: true, hint: "NTP, SSDP, SNMP, Chargen, CLDAP, Memcached: evita que tu red sea usada como reflector en ataques" },
@@ -23,9 +28,11 @@
     function generate(inputs, version) {
         const wan = inputs.wan_interface || "ether1";
         const lan = inputs.lan_subnet || "192.168.0.0/16";
+        const lanIf = inputs.lan_interface || "bridge-lan";
         const mail = (inputs.mail_server || "").trim();
         const connLimit = inputs.conn_limit || "100";
         const banTime = inputs.ban_time || "1h";
+        const fw = inputs.include_firewall;
         const logYes = inputs.notify_log;
         const logFlood = logYes ? ` log=yes log-prefix="ANTI-BL-FLOOD"` : "";
         const logSpam = logYes ? ` log=yes log-prefix="ANTI-BL-SMTP"` : "";
@@ -37,11 +44,15 @@
         code += `# WAN: ${wan}  |  Clientes: ${lan}\n`;
         code += `# Objetivo: evitar que tu rango público caiga en listas negras\n`;
         code += `#           (Spamhaus, DNSBL, listas anti-DDoS por reflexión).\n`;
+        if (fw) {
+            code += `# Incluye Firewall Básico: reglas anti-blacklist ya intercaladas en el\n`;
+            code += `# orden correcto (antes del accept de LAN y del drop final).\n`;
+        }
         code += `# ====================================================\n\n`;
 
-        // 1. Bogons address-list (used by anti-spoofing)
+        // Bogons address-list (used by anti-spoofing)
         if (inputs.anti_spoof) {
-            code += `# 1. Lista de redes BOGON / reservadas (origen ilegítimo = spoofing)\n`;
+            code += `# Lista de redes BOGON / reservadas (origen ilegítimo = spoofing)\n`;
             code += `/ip firewall address-list\n`;
             const bogons = [
                 "0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8",
@@ -57,59 +68,103 @@
 
         code += `/ip firewall filter\n\n`;
 
-        // 2. Anti-spoofing
-        if (inputs.anti_spoof) {
-            code += `# 2. Anti-Spoofing: descartar paquetes con IP de origen bogon\n`;
-            code += `add chain=input  action=drop in-interface=${wan} src-address-list=BOGONS comment="Anti-BL: drop bogon source (router)"\n`;
-            code += `add chain=forward action=drop in-interface=${wan} src-address-list=BOGONS comment="Anti-BL: drop bogon source (entrante)"\n`;
-            code += `# Saliente: un cliente solo puede usar IP de origen de su propio rango\n`;
-            code += `add chain=forward action=drop out-interface=${wan} src-address=!${lan} comment="Anti-BL: drop spoofed source (saliente)"\n`;
-            code += `# Refuerzo recomendado (RouterOS): activa Reverse Path Filtering\n`;
-            code += `# /ip settings set rp-filter=loose\n\n`;
+        // ============ INPUT CHAIN ============
+        code += `# ====================================================\n`;
+        code += `# CADENA INPUT (tráfico hacia el propio router)\n`;
+        code += `# ====================================================\n`;
+        if (fw) {
+            code += `add chain=input action=accept connection-state=established,related comment="Aceptar establecidas/relacionadas"\n`;
+            code += `add chain=input action=drop connection-state=invalid comment="Descartar inválidas"\n`;
+            code += `add chain=input action=accept protocol=icmp comment="Permitir ICMP (ping)"\n`;
         }
+        if (inputs.anti_spoof) {
+            code += `add chain=input action=drop in-interface=${wan} src-address-list=BOGONS comment="Anti-BL: drop bogon source (router)"\n`;
+        }
+        if (inputs.block_amplification) {
+            code += `add chain=input action=drop protocol=udp in-interface=${wan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión (router)"\n`;
+        }
+        if (inputs.block_openresolver) {
+            code += `add chain=input action=drop protocol=udp in-interface=${wan} dst-port=53 comment="Anti-BL: drop DNS entrante (router)"\n`;
+            code += `add chain=input action=drop protocol=tcp in-interface=${wan} dst-port=53 comment="Anti-BL: drop DNS entrante TCP (router)"\n`;
+        }
+        if (inputs.detect_flood) {
+            code += `add chain=input action=drop src-address-list=infectados comment="Anti-BL: bloquear clientes infectados (router)"\n`;
+        }
+        if (fw) {
+            if (inputs.allow_winbox) {
+                code += `# ADVERTENCIA: Winbox queda expuesto a Internet. Restríngelo por IP:\n`;
+                code += `# /ip firewall address-list add list=allowed-admins address=TU_IP_PUBLICA\n`;
+                code += `# y añade src-address-list=allowed-admins a la siguiente regla.\n`;
+                code += `add chain=input action=accept protocol=tcp dst-port=${inputs.winbox_port || "8291"} comment="Permitir Winbox desde Internet"\n`;
+            }
+            code += `add chain=input action=accept in-interface=${lanIf} comment="Permitir acceso completo desde LAN"\n`;
+            code += `add chain=input action=drop comment="Bloquear el resto del tráfico hacia el router"\n`;
+        }
+        code += `\n`;
 
-        // 3. Anti-Spam SMTP
+        // ============ FORWARD CHAIN ============
+        code += `# ====================================================\n`;
+        code += `# CADENA FORWARD (tráfico que cruza el router)\n`;
+        code += `# ====================================================\n`;
+        if (fw) {
+            if (inputs.enable_fasttrack) {
+                code += `# FastTrack acelera TCP establecido. ADVERTENCIA: evita Mangle (rompe PCC/Queues simples).\n`;
+                code += `add chain=forward action=fasttrack-connection connection-state=established,related comment="FastTrack para rendimiento"\n`;
+            }
+            code += `add chain=forward action=accept connection-state=established,related comment="Aceptar establecidas/relacionadas"\n`;
+            code += `add chain=forward action=drop connection-state=invalid comment="Descartar inválidas"\n`;
+        }
+        if (inputs.anti_spoof) {
+            code += `add chain=forward action=drop in-interface=${wan} src-address-list=BOGONS comment="Anti-BL: drop bogon source (entrante)"\n`;
+            code += `add chain=forward action=drop out-interface=${wan} src-address=!${lan} comment="Anti-BL: drop spoofed source (saliente)"\n`;
+        }
         if (inputs.block_smtp) {
-            code += `# 3. Anti-Spam: bloquear SMTP directo (puerto 25) de clientes infectados\n`;
             if (mail) {
                 code += `add chain=forward action=accept protocol=tcp dst-port=25 src-address=${mail} out-interface=${wan} comment="Anti-BL: permitir servidor de correo autorizado"\n`;
             }
             code += `add chain=forward action=drop protocol=tcp dst-port=25 src-address=${lan} out-interface=${wan}${logSpam} comment="Anti-BL: bloquear SMTP saliente (spambots)"\n`;
-            code += `# Nota: los puertos 587 (submission) y 465 (SMTPS) NO se bloquean: son\n`;
-            code += `# correo legítimo autenticado de clientes. Solo el 25 dispara DNSBL.\n\n`;
         }
-
-        // 4. Amplification / reflection
         if (inputs.block_amplification) {
-            code += `# 4. Anti-Amplificación / Reflexión: cerrar puertos usados en ataques DDoS\n`;
-            code += `#    (Chargen 19, NTP 123, SNMP 161, CLDAP 389, SSDP 1900, Memcached 11211, MSSQL 1434, NetBIOS 137)\n`;
-            code += `add chain=input  action=drop protocol=udp in-interface=${wan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión (router)"\n`;
-            code += `add chain=forward action=drop protocol=udp in-interface=${wan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión hacia clientes"\n\n`;
+            code += `add chain=forward action=drop protocol=udp in-interface=${wan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión hacia clientes"\n`;
         }
-
-        // 5. Open DNS resolver
         if (inputs.block_openresolver) {
-            code += `# 5. Anti DNS abierto / amplificación DNS: bloquear consultas DNS entrantes desde Internet\n`;
-            code += `add chain=input  action=drop protocol=udp in-interface=${wan} dst-port=53 comment="Anti-BL: drop DNS entrante (router)"\n`;
-            code += `add chain=input  action=drop protocol=tcp in-interface=${wan} dst-port=53 comment="Anti-BL: drop DNS entrante TCP (router)"\n`;
             code += `add chain=forward action=drop protocol=udp in-interface=${wan} dst-port=53 comment="Anti-BL: drop open resolver hacia clientes"\n`;
             code += `add chain=forward action=drop protocol=tcp in-interface=${wan} dst-port=53 comment="Anti-BL: drop open resolver TCP hacia clientes"\n`;
-            code += `# Si algún cliente opera un DNS autoritativo legítimo, agrega una regla accept\n`;
-            code += `# por encima de estas con su dst-address específico.\n\n`;
         }
-
-        // 6. Infected client / flood detection
         if (inputs.detect_flood) {
-            code += `# 6. Detección de clientes infectados (botnets / scanners por exceso de conexiones)\n`;
             code += `add chain=forward action=add-src-to-address-list connection-state=new src-address=${lan} out-interface=${wan} \\\n`;
             code += `    connection-limit=${connLimit},32 address-list=infectados address-list-timeout=${banTime}${logFlood} comment="Anti-BL: marcar cliente con flood de conexiones"\n`;
             code += `add chain=forward action=drop src-address-list=infectados comment="Anti-BL: bloquear clientes infectados (saliente)"\n`;
-            code += `add chain=input  action=drop src-address-list=infectados comment="Anti-BL: bloquear clientes infectados (router)"\n\n`;
+        }
+        if (fw) {
+            code += `add chain=forward action=accept in-interface=${lanIf} comment="Permitir salida de LAN a Internet"\n`;
+            code += `add chain=forward action=accept connection-state=new connection-nat-state=dstnat comment="Permitir reenvío de puertos (DST-NAT)"\n`;
+            code += `add chain=forward action=drop comment="Bloquear todo lo demás en Forward"\n`;
+        }
+        code += `\n`;
+
+        // ============ NAT ============
+        if (fw) {
+            code += `# ====================================================\n`;
+            code += `# NAT (Enmascaramiento de salida)\n`;
+            code += `# ====================================================\n`;
+            code += `/ip firewall nat\n`;
+            code += `add chain=srcnat out-interface=${wan} action=masquerade comment="Masquerade WAN"\n\n`;
         }
 
+        // ============ Notes ============
+        if (inputs.anti_spoof) {
+            code += `# Refuerzo recomendado (RouterOS): activa Reverse Path Filtering\n`;
+            code += `# /ip settings set rp-filter=loose\n`;
+        }
         code += `# ====================================================\n`;
         code += `# RECOMENDACIONES:\n`;
-        code += `#  - Coloca estas reglas ANTES de tu regla final de accept/drop por defecto.\n`;
+        if (!fw) {
+            code += `#  - Coloca estas reglas ANTES de tu regla final de accept/drop por defecto.\n`;
+        }
+        if (inputs.block_smtp) {
+            code += `#  - Los puertos 587 (submission) y 465 (SMTPS) NO se bloquean: son correo legítimo autenticado.\n`;
+        }
         code += `#  - Verifica tu IP pública en: https://check.spamhaus.org y https://mxtoolbox.com/blacklists.aspx\n`;
         code += `#  - Mantén también una blocklist entrante (FireHOL/Spamhaus) y Anti Brute-Force.\n`;
         if (inputs.detect_flood) {
