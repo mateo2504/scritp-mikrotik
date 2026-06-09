@@ -10,6 +10,10 @@
                 { value: "single", label: "Interfaz única (ej: ether1)" },
                 { value: "list", label: "Lista de interfaces WAN/LAN (recomendado, soporta múltiples)" }
             ], default: "single", hint: "Las listas WAN/LAN permiten varias WAN o varias LAN. Es el modelo oficial de MikroTik" },
+            { id: "client_match", label: "Identificar clientes por", type: "select", options: [
+                { value: "interface", label: "Interfaz LAN (ethernet/bridge)" },
+                { value: "pool", label: "Rango/Pool de IP (PPPoE, Hotspot, DHCP)" }
+            ], default: "interface", hint: "Con servidor PPPoE los clientes están en interfaces dinámicas: usa 'Rango/Pool de IP' para matchearlos por su pool (ej: 172.26.50.0/23)" },
             { id: "wan_interface", label: "Interfaz WAN (Salida a Internet)", type: "text", default: "ether1", hint: "Interfaz de salida (ej: ether1). En modo lista: separa varias con coma (ej: ether1,ether2)" },
             { id: "lan_subnet", label: "Rango de Clientes (LAN / Pool Público)", type: "text", default: "192.168.0.0/16", hint: "Subred CIDR de tus clientes. Si entregas IP pública directa, pon ese rango (ej: 45.10.20.0/24)" },
             { id: "include_firewall", label: "Incluir Firewall Básico recomendado", type: "checkbox", default: true, hint: "Agrega las reglas base (input/forward seguros + NAT masquerade) ya integradas en el orden correcto" },
@@ -42,6 +46,9 @@
         const inWan = useList ? `in-interface-list=WAN` : `in-interface=${wan}`;
         const outWan = useList ? `out-interface-list=WAN` : `out-interface=${wan}`;
         const inLan = useList ? `in-interface-list=LAN` : `in-interface=${lanIf}`;
+        // Identificación del cliente: por interfaz LAN o por rango/pool (PPPoE/Hotspot/DHCP)
+        const clientMatch = inputs.client_match || 'interface';
+        const lanRef = clientMatch === 'pool' ? `src-address=${lan}` : inLan;
         const connLimit = inputs.conn_limit || "100";
         const banTime = inputs.ban_time || "1h";
         const fw = inputs.include_firewall;
@@ -112,7 +119,7 @@
             code += `# Mantiene la cadena forward mínima para no cargar la CPU.\n`;
             code += `# ====================================================\n`;
             code += `/ip firewall raw\n`;
-            if (inputs.anti_spoof) {
+            if (inputs.anti_spoof && clientMatch === 'interface') {
                 code += `# Egress anti-spoofing (BCP38): el cliente solo puede salir con su propio rango\n`;
                 code += `add chain=prerouting action=drop ${inLan} src-address=!${lan} comment="Anti-BL: drop spoofed source (saliente)"\n`;
             }
@@ -165,7 +172,7 @@
                 code += `# y añade src-address-list=allowed-admins a la siguiente regla.\n`;
                 code += `add chain=input action=accept protocol=tcp dst-port=${inputs.winbox_port || "8291"} comment="Permitir Winbox desde Internet"\n`;
             }
-            code += `add chain=input action=accept ${inLan} comment="Permitir acceso completo desde LAN"\n`;
+            code += `add chain=input action=accept ${lanRef} comment="Permitir acceso completo desde LAN"\n`;
             code += `add chain=input action=drop comment="Bloquear el resto del tráfico hacia el router"\n`;
         }
         code += `\n`;
@@ -182,7 +189,7 @@
             code += `add chain=forward action=accept connection-state=established,related,untracked comment="Aceptar establecidas/relacionadas"\n`;
             code += `add chain=forward action=drop connection-state=invalid comment="Descartar inválidas"\n`;
         }
-        if (inputs.anti_spoof && !rawMode) {
+        if (inputs.anti_spoof && (!rawMode || clientMatch === 'pool')) {
             code += `# Egress anti-spoofing (BCP38): un cliente solo puede salir con su propio rango\n`;
             code += `add chain=forward action=drop ${outWan} src-address=!${lan} comment="Anti-BL: drop spoofed source (saliente)"\n`;
         }
@@ -209,7 +216,7 @@
             code += `add chain=forward action=add-src-to-address-list connection-state=new protocol=tcp src-address=${lan} ${outWan} address-list=infectados address-list-timeout=${banTime}${logFlood} comment="Anti-BL: exceso de tasa = posible bot/escáner"\n`;
         }
         if (fw) {
-            code += `add chain=forward action=accept ${inLan} comment="Permitir salida de LAN a Internet"\n`;
+            code += `add chain=forward action=accept ${lanRef} comment="Permitir salida de LAN a Internet"\n`;
             code += `add chain=forward action=accept connection-state=new connection-nat-state=dstnat comment="Permitir reenvío de puertos (DST-NAT)"\n`;
             code += `add chain=forward action=drop comment="Bloquear todo lo demás en Forward"\n`;
         }
@@ -246,6 +253,11 @@
         }
         if (inputs.block_smtp) {
             code += `#  - Los puertos 587 (submission) y 465 (SMTPS) NO se bloquean: son correo legítimo autenticado.\n`;
+        }
+        if (clientMatch === 'pool') {
+            code += `#  - Clientes identificados por pool (${lan}). RENDIMIENTO PPPoE: revisa el perfil PPP\n`;
+            code += `#    y desactiva cifrado/compresión (consumen mucha CPU):\n`;
+            code += `#    /ppp profile set [find] use-encryption=no use-compression=no use-mpls=no\n`;
         }
         code += `#  - Verifica tu IP pública en: https://check.spamhaus.org y https://mxtoolbox.com/blacklists.aspx\n`;
         code += `#  - Mantén también una blocklist entrante (FireHOL/Spamhaus) y Anti Brute-Force.\n`;
