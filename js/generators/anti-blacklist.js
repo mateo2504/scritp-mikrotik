@@ -26,6 +26,7 @@
             { id: "detect_flood", label: "Detectar y banear clientes infectados (flood de conexiones)", type: "checkbox", default: true, hint: "Detecta bots/escáneres por TASA de conexiones nuevas por segundo (no por total abierto) para no banear hogares normales" },
             { id: "conn_limit", label: "Conexiones nuevas por segundo por cliente (umbral)", type: "text", default: "50", hint: "Tasa sostenida que delata un bot/escáner. Un hogar normal rara vez supera 50/seg; un host infectado abre cientos/seg" },
             { id: "ban_time", label: "Tiempo de baneo del cliente infectado", type: "text", default: "1h" },
+            { id: "raw_mode", label: "Modo alto rendimiento (filtrar en RAW)", type: "checkbox", default: false, hint: "Mueve los drops sin estado (SMTP, amplificación, DNS, anti-spoofing) a /ip firewall raw y deja el forward mínimo. Reduce carga de CPU. Ideal para WISP de alto tráfico. Con NAT el conntrack sigue activo" },
             { id: "notify_log", label: "Registrar eventos en el log del router", type: "checkbox", default: true }
         ]
     };
@@ -44,6 +45,7 @@
         const connLimit = inputs.conn_limit || "100";
         const banTime = inputs.ban_time || "1h";
         const fw = inputs.include_firewall;
+        const rawMode = inputs.raw_mode;
         const logYes = inputs.notify_log;
         const logFlood = logYes ? ` log=yes log-prefix="ANTI-BL-FLOOD"` : "";
         const logSpam = logYes ? ` log=yes log-prefix="ANTI-BL-SMTP"` : "";
@@ -103,6 +105,33 @@
             code += `\n`;
         }
 
+        // Modo alto rendimiento: drops SIN ESTADO en RAW (no requieren conntrack -> menos CPU)
+        if (rawMode) {
+            code += `# ====================================================\n`;
+            code += `# RAW ALTO RENDIMIENTO: filtrado sin estado antes del conntrack.\n`;
+            code += `# Mantiene la cadena forward mínima para no cargar la CPU.\n`;
+            code += `# ====================================================\n`;
+            code += `/ip firewall raw\n`;
+            if (inputs.anti_spoof) {
+                code += `# Egress anti-spoofing (BCP38): el cliente solo puede salir con su propio rango\n`;
+                code += `add chain=prerouting action=drop ${inLan} src-address=!${lan} comment="Anti-BL: drop spoofed source (saliente)"\n`;
+            }
+            if (inputs.block_smtp) {
+                if (mail) {
+                    code += `add chain=prerouting action=accept protocol=tcp dst-port=25 src-address=${mail} comment="Anti-BL: permitir servidor de correo autorizado"\n`;
+                }
+                code += `add chain=prerouting action=drop protocol=tcp dst-port=25 src-address=${lan}${logSpam} comment="Anti-BL: bloquear SMTP saliente (spambots)"\n`;
+            }
+            if (inputs.block_amplification) {
+                code += `add chain=prerouting action=drop protocol=udp ${inWan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión/amplificación"\n`;
+            }
+            if (inputs.block_openresolver) {
+                code += `add chain=prerouting action=drop protocol=udp ${inWan} dst-port=53 comment="Anti-BL: drop DNS abierto (UDP)"\n`;
+                code += `add chain=prerouting action=drop protocol=tcp ${inWan} dst-port=53 comment="Anti-BL: drop DNS abierto (TCP)"\n`;
+            }
+            code += `\n`;
+        }
+
         code += `/ip firewall filter\n\n`;
 
         // ============ INPUT CHAIN ============
@@ -119,10 +148,10 @@
                 code += `add chain=input action=accept protocol=icmp comment="Permitir ICMP (ping)"\n`;
             }
         }
-        if (inputs.block_amplification) {
+        if (inputs.block_amplification && !rawMode) {
             code += `add chain=input action=drop protocol=udp ${inWan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión (router)"\n`;
         }
-        if (inputs.block_openresolver) {
+        if (inputs.block_openresolver && !rawMode) {
             code += `add chain=input action=drop protocol=udp ${inWan} dst-port=53 comment="Anti-BL: drop DNS entrante (router)"\n`;
             code += `add chain=input action=drop protocol=tcp ${inWan} dst-port=53 comment="Anti-BL: drop DNS entrante TCP (router)"\n`;
         }
@@ -153,20 +182,20 @@
             code += `add chain=forward action=accept connection-state=established,related,untracked comment="Aceptar establecidas/relacionadas"\n`;
             code += `add chain=forward action=drop connection-state=invalid comment="Descartar inválidas"\n`;
         }
-        if (inputs.anti_spoof) {
+        if (inputs.anti_spoof && !rawMode) {
             code += `# Egress anti-spoofing (BCP38): un cliente solo puede salir con su propio rango\n`;
             code += `add chain=forward action=drop ${outWan} src-address=!${lan} comment="Anti-BL: drop spoofed source (saliente)"\n`;
         }
-        if (inputs.block_smtp) {
+        if (inputs.block_smtp && !rawMode) {
             if (mail) {
                 code += `add chain=forward action=accept protocol=tcp dst-port=25 src-address=${mail} ${outWan} comment="Anti-BL: permitir servidor de correo autorizado"\n`;
             }
             code += `add chain=forward action=drop protocol=tcp dst-port=25 src-address=${lan} ${outWan}${logSpam} comment="Anti-BL: bloquear SMTP saliente (spambots)"\n`;
         }
-        if (inputs.block_amplification) {
+        if (inputs.block_amplification && !rawMode) {
             code += `add chain=forward action=drop protocol=udp ${inWan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión hacia clientes"\n`;
         }
-        if (inputs.block_openresolver) {
+        if (inputs.block_openresolver && !rawMode) {
             code += `add chain=forward action=drop protocol=udp ${inWan} dst-port=53 comment="Anti-BL: drop open resolver hacia clientes"\n`;
             code += `add chain=forward action=drop protocol=tcp ${inWan} dst-port=53 comment="Anti-BL: drop open resolver TCP hacia clientes"\n`;
         }
@@ -196,6 +225,15 @@
         }
 
         // ============ Notes ============
+        if (rawMode) {
+            code += `# MODO ALTO RENDIMIENTO: los drops sin estado están en RAW (prerouting),\n`;
+            code += `# que no usa connection tracking, por lo que la cadena forward queda\n`;
+            code += `# mínima y consume menos CPU.\n`;
+            code += `# NOTA NAT: si usas masquerade, el conntrack sigue ACTIVO (el NAT lo exige),\n`;
+            code += `# así que no se alcanza la Fast Path pura. El mayor acelerador sería\n`;
+            code += `# FastTrack, pero es incompatible con Simple Queues/Mangle.\n`;
+            code += `# La detección de flood permanece en filter porque requiere conntrack.\n`;
+        }
         if (inputs.anti_spoof) {
             code += `# El filtrado de bogons se hace en RAW (prerouting), antes del conntrack.\n`;
             code += `# Refuerzo adicional (RouterOS): activa Reverse Path Filtering\n`;
