@@ -6,11 +6,16 @@
         description: "Protege tu rango de IPs públicas de caer en listas negras (Spamhaus, DNSBL, listas anti-DDoS). Bloquea spambots, reflexión/amplificación, spoofing, resolvers DNS abiertos y clientes infectados. Incluye firewall básico opcional.",
         fileName: "mikrotik_anti_blacklist.rsc",
         inputs: [
-            { id: "wan_interface", label: "Interfaz / Lista WAN (Salida a Internet)", type: "text", default: "ether1", hint: "Interfaz o interface-list de salida (ej: ether1 o WAN)" },
+            { id: "interface_mode", label: "Modo de Interfaz", type: "select", options: [
+                { value: "single", label: "Interfaz única (ej: ether1)" },
+                { value: "list", label: "Lista de interfaces WAN/LAN (recomendado, soporta múltiples)" }
+            ], default: "single", hint: "Las listas WAN/LAN permiten varias WAN o varias LAN. Es el modelo oficial de MikroTik" },
+            { id: "wan_interface", label: "Interfaz WAN (Salida a Internet)", type: "text", default: "ether1", hint: "Interfaz de salida (ej: ether1). En modo lista: separa varias con coma (ej: ether1,ether2)" },
             { id: "lan_subnet", label: "Rango de Clientes (LAN / Pool Público)", type: "text", default: "192.168.0.0/16", hint: "Subred CIDR de tus clientes. Si entregas IP pública directa, pon ese rango (ej: 45.10.20.0/24)" },
             { id: "include_firewall", label: "Incluir Firewall Básico recomendado", type: "checkbox", default: true, hint: "Agrega las reglas base (input/forward seguros + NAT masquerade) ya integradas en el orden correcto" },
-            { id: "lan_interface", label: "Interfaz LAN (para Firewall Básico)", type: "text", default: "bridge-lan", hint: "Solo se usa si activas el Firewall Básico. Interfaz o lista de tu red local" },
+            { id: "lan_interface", label: "Interfaz LAN (para Firewall Básico)", type: "text", default: "bridge-lan", hint: "Interfaz de tu red local. En modo lista: separa varias con coma (ej: bridge-lan,vlan10)" },
             { id: "enable_fasttrack", label: "Activar FastTrack (Firewall Básico)", type: "checkbox", default: true, hint: "Acelera el tráfico TCP. ¡Desactívalo si usas PCC o Simple Queues!" },
+            { id: "icmp_ratelimit", label: "Limitar ICMP por tasa (anti-flood)", type: "checkbox", default: true, hint: "En vez de aceptar todo ICMP, lo limita para mitigar floods (modelo Advanced Firewall). Solo con Firewall Básico" },
             { id: "allow_winbox", label: "Permitir Winbox desde WAN (Firewall Básico)", type: "checkbox", default: false, hint: "Abre el puerto de administración a Internet. Se recomienda restringir por address-list" },
             { id: "winbox_port", label: "Puerto Winbox", type: "text", default: "8291" },
             { id: "block_smtp", label: "Bloquear SMTP saliente (Puerto 25) — Anti-Spam", type: "checkbox", default: true, hint: "Causa #1 de blacklist DNSBL: spambots de clientes infectados enviando correo directo" },
@@ -30,6 +35,12 @@
         const lan = inputs.lan_subnet || "192.168.0.0/16";
         const lanIf = inputs.lan_interface || "bridge-lan";
         const mail = (inputs.mail_server || "").trim();
+
+        // Modo de interfaz: única vs interface-list (modelo oficial MikroTik)
+        const useList = inputs.interface_mode === 'list';
+        const inWan = useList ? `in-interface-list=WAN` : `in-interface=${wan}`;
+        const outWan = useList ? `out-interface-list=WAN` : `out-interface=${wan}`;
+        const inLan = useList ? `in-interface-list=LAN` : `in-interface=${lanIf}`;
         const connLimit = inputs.conn_limit || "100";
         const banTime = inputs.ban_time || "1h";
         const fw = inputs.include_firewall;
@@ -49,6 +60,18 @@
             code += `# orden correcto (antes del accept de LAN y del drop final).\n`;
         }
         code += `# ====================================================\n\n`;
+
+        // Interface-lists WAN/LAN (modelo oficial MikroTik: soporta múltiples WAN/LAN)
+        if (useList) {
+            code += `# Listas de interfaces WAN/LAN (agrega aquí todas tus interfaces)\n`;
+            code += `/interface list\n`;
+            code += `add name=WAN comment="Anti-BL: interfaces de salida a Internet"\n`;
+            code += `add name=LAN comment="Anti-BL: interfaces de red local"\n`;
+            code += `/interface list member\n`;
+            wan.split(',').forEach(i => { const t = i.trim(); if (t) code += `add list=WAN interface=${t}\n`; });
+            lanIf.split(',').forEach(i => { const t = i.trim(); if (t) code += `add list=LAN interface=${t}\n`; });
+            code += `\n`;
+        }
 
         // Anti-spoofing: RFC6890 address-lists + RAW prerouting (modelo "Building Advanced Firewall")
         if (inputs.anti_spoof) {
@@ -76,7 +99,7 @@
             code += `add chain=prerouting action=drop dst-address-list=bad_ipv4 comment="Anti-BL: drop bogon (destino)"\n`;
             code += `add chain=prerouting action=drop src-address-list=bad_src_ipv4 comment="Anti-BL: origen inválido"\n`;
             code += `add chain=prerouting action=drop dst-address-list=bad_dst_ipv4 comment="Anti-BL: destino inválido"\n`;
-            code += `add chain=prerouting action=drop in-interface=${wan} src-address-list=not_global_ipv4 comment="Anti-BL: drop no-global desde WAN (spoofing entrante)"\n`;
+            code += `add chain=prerouting action=drop ${inWan} src-address-list=not_global_ipv4 comment="Anti-BL: drop no-global desde WAN (spoofing entrante)"\n`;
             code += `\n`;
         }
 
@@ -89,14 +112,19 @@
         if (fw) {
             code += `add chain=input action=accept connection-state=established,related,untracked comment="Aceptar establecidas/relacionadas"\n`;
             code += `add chain=input action=drop connection-state=invalid comment="Descartar inválidas"\n`;
-            code += `add chain=input action=accept protocol=icmp comment="Permitir ICMP (ping)"\n`;
+            if (inputs.icmp_ratelimit) {
+                code += `add chain=input action=accept protocol=icmp limit=50/5s,5:packet comment="Permitir ICMP con límite de tasa (anti-flood)"\n`;
+                code += `add chain=input action=drop protocol=icmp comment="Descartar exceso de ICMP"\n`;
+            } else {
+                code += `add chain=input action=accept protocol=icmp comment="Permitir ICMP (ping)"\n`;
+            }
         }
         if (inputs.block_amplification) {
-            code += `add chain=input action=drop protocol=udp in-interface=${wan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión (router)"\n`;
+            code += `add chain=input action=drop protocol=udp ${inWan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión (router)"\n`;
         }
         if (inputs.block_openresolver) {
-            code += `add chain=input action=drop protocol=udp in-interface=${wan} dst-port=53 comment="Anti-BL: drop DNS entrante (router)"\n`;
-            code += `add chain=input action=drop protocol=tcp in-interface=${wan} dst-port=53 comment="Anti-BL: drop DNS entrante TCP (router)"\n`;
+            code += `add chain=input action=drop protocol=udp ${inWan} dst-port=53 comment="Anti-BL: drop DNS entrante (router)"\n`;
+            code += `add chain=input action=drop protocol=tcp ${inWan} dst-port=53 comment="Anti-BL: drop DNS entrante TCP (router)"\n`;
         }
         if (inputs.detect_flood) {
             code += `add chain=input action=drop src-address-list=infectados comment="Anti-BL: bloquear clientes infectados (router)"\n`;
@@ -108,7 +136,7 @@
                 code += `# y añade src-address-list=allowed-admins a la siguiente regla.\n`;
                 code += `add chain=input action=accept protocol=tcp dst-port=${inputs.winbox_port || "8291"} comment="Permitir Winbox desde Internet"\n`;
             }
-            code += `add chain=input action=accept in-interface=${lanIf} comment="Permitir acceso completo desde LAN"\n`;
+            code += `add chain=input action=accept ${inLan} comment="Permitir acceso completo desde LAN"\n`;
             code += `add chain=input action=drop comment="Bloquear el resto del tráfico hacia el router"\n`;
         }
         code += `\n`;
@@ -127,20 +155,20 @@
         }
         if (inputs.anti_spoof) {
             code += `# Egress anti-spoofing (BCP38): un cliente solo puede salir con su propio rango\n`;
-            code += `add chain=forward action=drop out-interface=${wan} src-address=!${lan} comment="Anti-BL: drop spoofed source (saliente)"\n`;
+            code += `add chain=forward action=drop ${outWan} src-address=!${lan} comment="Anti-BL: drop spoofed source (saliente)"\n`;
         }
         if (inputs.block_smtp) {
             if (mail) {
-                code += `add chain=forward action=accept protocol=tcp dst-port=25 src-address=${mail} out-interface=${wan} comment="Anti-BL: permitir servidor de correo autorizado"\n`;
+                code += `add chain=forward action=accept protocol=tcp dst-port=25 src-address=${mail} ${outWan} comment="Anti-BL: permitir servidor de correo autorizado"\n`;
             }
-            code += `add chain=forward action=drop protocol=tcp dst-port=25 src-address=${lan} out-interface=${wan}${logSpam} comment="Anti-BL: bloquear SMTP saliente (spambots)"\n`;
+            code += `add chain=forward action=drop protocol=tcp dst-port=25 src-address=${lan} ${outWan}${logSpam} comment="Anti-BL: bloquear SMTP saliente (spambots)"\n`;
         }
         if (inputs.block_amplification) {
-            code += `add chain=forward action=drop protocol=udp in-interface=${wan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión hacia clientes"\n`;
+            code += `add chain=forward action=drop protocol=udp ${inWan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión hacia clientes"\n`;
         }
         if (inputs.block_openresolver) {
-            code += `add chain=forward action=drop protocol=udp in-interface=${wan} dst-port=53 comment="Anti-BL: drop open resolver hacia clientes"\n`;
-            code += `add chain=forward action=drop protocol=tcp in-interface=${wan} dst-port=53 comment="Anti-BL: drop open resolver TCP hacia clientes"\n`;
+            code += `add chain=forward action=drop protocol=udp ${inWan} dst-port=53 comment="Anti-BL: drop open resolver hacia clientes"\n`;
+            code += `add chain=forward action=drop protocol=tcp ${inWan} dst-port=53 comment="Anti-BL: drop open resolver TCP hacia clientes"\n`;
         }
         if (inputs.detect_flood) {
             const rate = parseInt(connLimit) > 0 ? parseInt(connLimit) : 50;
@@ -148,11 +176,11 @@
             code += `# Detección de bots/escáneres por TASA de conexiones nuevas/seg (NO por total abierto:\n`;
             code += `# así un hogar con cientos de conexiones simultáneas legítimas NO se banea)\n`;
             code += `add chain=forward action=drop src-address-list=infectados comment="Anti-BL: bloquear clientes ya detectados (saliente)"\n`;
-            code += `add chain=forward action=accept connection-state=new protocol=tcp src-address=${lan} out-interface=${wan} limit=${rate},${burst}:packet comment="Anti-BL: tasa normal de conexiones nuevas (deja pasar)"\n`;
-            code += `add chain=forward action=add-src-to-address-list connection-state=new protocol=tcp src-address=${lan} out-interface=${wan} address-list=infectados address-list-timeout=${banTime}${logFlood} comment="Anti-BL: exceso de tasa = posible bot/escáner"\n`;
+            code += `add chain=forward action=accept connection-state=new protocol=tcp src-address=${lan} ${outWan} limit=${rate},${burst}:packet comment="Anti-BL: tasa normal de conexiones nuevas (deja pasar)"\n`;
+            code += `add chain=forward action=add-src-to-address-list connection-state=new protocol=tcp src-address=${lan} ${outWan} address-list=infectados address-list-timeout=${banTime}${logFlood} comment="Anti-BL: exceso de tasa = posible bot/escáner"\n`;
         }
         if (fw) {
-            code += `add chain=forward action=accept in-interface=${lanIf} comment="Permitir salida de LAN a Internet"\n`;
+            code += `add chain=forward action=accept ${inLan} comment="Permitir salida de LAN a Internet"\n`;
             code += `add chain=forward action=accept connection-state=new connection-nat-state=dstnat comment="Permitir reenvío de puertos (DST-NAT)"\n`;
             code += `add chain=forward action=drop comment="Bloquear todo lo demás en Forward"\n`;
         }
@@ -164,7 +192,7 @@
             code += `# NAT (Enmascaramiento de salida)\n`;
             code += `# ====================================================\n`;
             code += `/ip firewall nat\n`;
-            code += `add chain=srcnat out-interface=${wan} action=masquerade comment="Masquerade WAN"\n\n`;
+            code += `add chain=srcnat ${outWan} action=masquerade comment="Masquerade WAN"\n\n`;
         }
 
         // ============ Notes ============
