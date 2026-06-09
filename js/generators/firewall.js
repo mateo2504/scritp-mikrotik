@@ -27,7 +27,7 @@
         code += `# ====================================================\n`;
         code += `# 1. CADENA INPUT (Tráfico hacia el propio Router)\n`;
         code += `# ====================================================\n`;
-        code += `add chain=input action=accept connection-state=established,related comment="Aceptar conexiones establecidas y relacionadas"\n`;
+        code += `add chain=input action=accept connection-state=established,related,untracked comment="Aceptar conexiones establecidas y relacionadas"\n`;
         code += `add chain=input action=drop connection-state=invalid comment="Descartar conexiones invalidas"\n`;
         code += `add chain=input action=accept protocol=icmp comment="Permitir ping (ICMP)"\n`;
         
@@ -50,7 +50,7 @@
             code += `add chain=forward action=fasttrack-connection connection-state=established,related comment="FastTrack para maximizar rendimiento"\n`;
         }
         
-        code += `add chain=forward action=accept connection-state=established,related comment="Aceptar conexiones establecidas y relacionadas"\n`;
+        code += `add chain=forward action=accept connection-state=established,related,untracked comment="Aceptar conexiones establecidas y relacionadas"\n`;
         code += `add chain=forward action=drop connection-state=invalid comment="Descartar conexiones invalidas"\n`;
         code += `add chain=forward action=accept in-interface=${inputs.lan_interface} comment="Permitir salida de LAN a internet"\n`;
         code += `add chain=forward action=accept connection-state=new connection-nat-state=dstnat comment="Permitir reenvio de puertos (DST-NAT)"\n`;

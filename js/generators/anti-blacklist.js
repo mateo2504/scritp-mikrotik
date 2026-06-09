@@ -73,7 +73,7 @@
         code += `# CADENA INPUT (tráfico hacia el propio router)\n`;
         code += `# ====================================================\n`;
         if (fw) {
-            code += `add chain=input action=accept connection-state=established,related comment="Aceptar establecidas/relacionadas"\n`;
+            code += `add chain=input action=accept connection-state=established,related,untracked comment="Aceptar establecidas/relacionadas"\n`;
             code += `add chain=input action=drop connection-state=invalid comment="Descartar inválidas"\n`;
             code += `add chain=input action=accept protocol=icmp comment="Permitir ICMP (ping)"\n`;
         }
@@ -111,7 +111,7 @@
                 code += `# FastTrack acelera TCP establecido. ADVERTENCIA: evita Mangle (rompe PCC/Queues simples).\n`;
                 code += `add chain=forward action=fasttrack-connection connection-state=established,related comment="FastTrack para rendimiento"\n`;
             }
-            code += `add chain=forward action=accept connection-state=established,related comment="Aceptar establecidas/relacionadas"\n`;
+            code += `add chain=forward action=accept connection-state=established,related,untracked comment="Aceptar establecidas/relacionadas"\n`;
             code += `add chain=forward action=drop connection-state=invalid comment="Descartar inválidas"\n`;
         }
         if (inputs.anti_spoof) {
