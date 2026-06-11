@@ -28,7 +28,7 @@
             { id: "block_openresolver", label: "Bloquear DNS abierto / amplificación DNS (Puerto 53)", type: "checkbox", default: true, hint: "Impide que tus clientes sean usados como open resolvers (listas DDoS)" },
             { id: "anti_spoof", label: "Anti-Spoofing (descartar IPs de origen falsas / bogon)", type: "checkbox", default: true, hint: "Evita tráfico con IP de origen falsificada (spoofing) en ambos sentidos" },
             { id: "detect_flood", label: "Detectar y banear clientes infectados (flood de conexiones)", type: "checkbox", default: true, hint: "Detecta bots/escáneres por TASA de conexiones nuevas por segundo (no por total abierto) para no banear hogares normales" },
-            { id: "conn_limit", label: "Conexiones nuevas por segundo por cliente (umbral)", type: "text", default: "50", hint: "Tasa sostenida que delata un bot/escáner. Un hogar normal rara vez supera 50/seg; un host infectado abre cientos/seg" },
+            { id: "conn_limit", label: "Conexiones nuevas por segundo por cliente (umbral)", type: "text", default: "50", hint: "Tasa sostenida que delata un bot/escáner. Un hogar normal rara vez supera 50/seg; un host infectado abre cientos/seg. En RouterOS v6 se usa el equivalente en conexiones simultáneas (umbral x4)" },
             { id: "ban_time", label: "Tiempo de baneo del cliente infectado", type: "text", default: "1h" },
             { id: "raw_mode", label: "Modo alto rendimiento (filtrar en RAW)", type: "checkbox", default: false, hint: "Mueve los drops sin estado (SMTP, amplificación, DNS, anti-spoofing) a /ip firewall raw y deja el forward mínimo. Reduce carga de CPU. Ideal para WISP de alto tráfico. Con NAT el conntrack sigue activo" },
             { id: "notify_log", label: "Registrar eventos en el log del router", type: "checkbox", default: true }
@@ -49,7 +49,7 @@
         // Identificación del cliente: por interfaz LAN o por rango/pool (PPPoE/Hotspot/DHCP)
         const clientMatch = inputs.client_match || 'interface';
         const lanRef = clientMatch === 'pool' ? `src-address=${lan}` : inLan;
-        const connLimit = inputs.conn_limit || "100";
+        const connLimit = inputs.conn_limit || "50";
         const banTime = inputs.ban_time || "1h";
         const fw = inputs.include_firewall;
         const rawMode = inputs.raw_mode;
@@ -108,6 +108,9 @@
             code += `add chain=prerouting action=drop dst-address-list=bad_ipv4 comment="Anti-BL: drop bogon (destino)"\n`;
             code += `add chain=prerouting action=drop src-address-list=bad_src_ipv4 comment="Anti-BL: origen inválido"\n`;
             code += `add chain=prerouting action=drop dst-address-list=bad_dst_ipv4 comment="Anti-BL: destino inválido"\n`;
+            code += `# ADVERTENCIA: Si tu WAN tiene IP privada o CGNAT (192.168.x.x, 10.x.x.x, 100.64.0.0/10,\n`;
+            code += `# típico detrás de un módem ISP en modo router), la siguiente regla descartará el tráfico\n`;
+            code += `# de tu gateway (DHCP, DNS del módem). En ese caso elimínala o quita tu subred de not_global_ipv4.\n`;
             code += `add chain=prerouting action=drop ${inWan} src-address-list=not_global_ipv4 comment="Anti-BL: drop no-global desde WAN (spoofing entrante)"\n`;
             code += `\n`;
         }
@@ -127,7 +130,8 @@
                 if (mail) {
                     code += `add chain=prerouting action=accept protocol=tcp dst-port=25 src-address=${mail} comment="Anti-BL: permitir servidor de correo autorizado"\n`;
                 }
-                code += `add chain=prerouting action=drop protocol=tcp dst-port=25 src-address=${lan}${logSpam} comment="Anti-BL: bloquear SMTP saliente (spambots)"\n`;
+                code += `# dst-address=!${lan} evita bloquear correo hacia servidores internos (en RAW aún no se conoce la interfaz de salida)\n`;
+                code += `add chain=prerouting action=drop protocol=tcp dst-port=25 src-address=${lan} dst-address=!${lan}${logSpam} comment="Anti-BL: bloquear SMTP saliente (spambots)"\n`;
             }
             if (inputs.block_amplification) {
                 code += `add chain=prerouting action=drop protocol=udp ${inWan} dst-port=19,123,161,389,1900,11211,1434,137 comment="Anti-BL: drop reflexión/amplificación"\n`;
@@ -209,11 +213,20 @@
         if (inputs.detect_flood) {
             const rate = parseInt(connLimit) > 0 ? parseInt(connLimit) : 50;
             const burst = rate * 2;
-            code += `# Detección de bots/escáneres por TASA de conexiones nuevas/seg (NO por total abierto:\n`;
-            code += `# así un hogar con cientos de conexiones simultáneas legítimas NO se banea)\n`;
             code += `add chain=forward action=drop src-address-list=infectados comment="Anti-BL: bloquear clientes ya detectados (saliente)"\n`;
-            code += `add chain=forward action=accept connection-state=new protocol=tcp src-address=${lan} ${outWan} limit=${rate},${burst}:packet comment="Anti-BL: tasa normal de conexiones nuevas (deja pasar)"\n`;
-            code += `add chain=forward action=add-src-to-address-list connection-state=new protocol=tcp src-address=${lan} ${outWan} address-list=infectados address-list-timeout=${banTime}${logFlood} comment="Anti-BL: exceso de tasa = posible bot/escáner"\n`;
+            if (version === 'v7') {
+                code += `# Detección por TASA de conexiones nuevas/seg POR CLIENTE: dst-limit con\n`;
+                code += `# clasificador src-address lleva un contador INDEPENDIENTE por cada IP de origen\n`;
+                code += `# (el matcher 'limit' a secas es global y banearía clientes al azar en redes grandes)\n`;
+                code += `add chain=forward action=accept connection-state=new protocol=tcp src-address=${lan} ${outWan} dst-limit=${rate},${burst},src-address/10s comment="Anti-BL: tasa normal de conexiones nuevas por cliente (deja pasar)"\n`;
+                code += `add chain=forward action=add-src-to-address-list connection-state=new protocol=tcp src-address=${lan} ${outWan} address-list=infectados address-list-timeout=${banTime}${logFlood} comment="Anti-BL: exceso de tasa por cliente = posible bot/escáner"\n`;
+            } else {
+                const concurrent = rate * 4;
+                code += `# v6: dst-limit no clasifica por src-address, así que se detecta por CONEXIONES\n`;
+                code += `# SIMULTÁNEAS por cliente (connection-limit, contador individual por IP /32).\n`;
+                code += `# Umbral = ${concurrent} (4x el valor configurado). Un hogar normal no lo alcanza.\n`;
+                code += `add chain=forward action=add-src-to-address-list connection-state=new protocol=tcp connection-limit=${concurrent},32 src-address=${lan} ${outWan} address-list=infectados address-list-timeout=${banTime}${logFlood} comment="Anti-BL: >${concurrent} conexiones simultáneas = posible bot/escáner"\n`;
+            }
         }
         if (fw) {
             code += `add chain=forward action=accept ${lanRef} comment="Permitir salida de LAN a Internet"\n`;
@@ -267,9 +280,13 @@
             code += `#    Recuerda: FastTrack se rompe si activas Mangle/PCC/Simple Queues.\n`;
         }
         if (inputs.detect_flood) {
-            code += `#  - La detección usa TASA de conexiones nuevas/seg, no total abierto: no banea hogares normales.\n`;
+            if (version === 'v7') {
+                code += `#  - La detección usa TASA de conexiones nuevas/seg POR CLIENTE (dst-limit src-address).\n`;
+            } else {
+                code += `#  - En v6 la detección es por CONEXIONES SIMULTÁNEAS por cliente (connection-limit).\n`;
+            }
             code += `#  - Revisa/limpia detectados con: /ip firewall address-list print where list=infectados\n`;
-            code += `#    Si aparece un cliente legítimo, sube el umbral de conexiones nuevas/seg.\n`;
+            code += `#    Si aparece un cliente legítimo, sube el umbral configurado.\n`;
         }
         code += `# ====================================================\n`;
 
