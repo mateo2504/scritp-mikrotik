@@ -12,3 +12,8 @@ Desktop.ini
 *.njsproj
 *.sln
 *.swp
+
+# Node (dependencias locales de pruebas)
+node_modules/
+package.json
+package-lock.json
