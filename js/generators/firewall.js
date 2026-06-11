@@ -75,6 +75,9 @@
             code += `add chain=prerouting action=drop dst-address-list=bad_ipv4 comment="drop bogon (destino)"\n`;
             code += `add chain=prerouting action=drop src-address-list=bad_src_ipv4 comment="origen invalido"\n`;
             code += `add chain=prerouting action=drop dst-address-list=bad_dst_ipv4 comment="destino invalido"\n`;
+            code += `# ADVERTENCIA: Si tu WAN tiene IP privada o CGNAT (192.168.x.x, 10.x.x.x, 100.64.0.0/10,\n`;
+            code += `# tipico detras de un modem ISP en modo router), las siguientes reglas descartaran TODO\n`;
+            code += `# tu trafico WAN. En ese caso elimina estas reglas o quita tu subred de not_global_ipv4.\n`;
             if (useList) {
                 code += `add chain=prerouting action=drop in-interface-list=WAN src-address-list=not_global_ipv4 comment="drop no-global desde WAN (spoofing)"\n`;
             } else {
