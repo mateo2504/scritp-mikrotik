@@ -85,6 +85,10 @@
         code += `# RouterOS Version: ${version.toUpperCase()}\n`;
         code += `# Generado: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}\n`;
         code += `# Compatible con cualquier Routerboard (Ajusta los nombres de interfaces)\n`;
+        code += `# ====================================================\n`;
+        code += `# IMPORTANTE: Desactiva FastTrack en el firewall (o agrega reglas de\n`;
+        code += `# bypass antes de la regla fasttrack-connection). FastTrack salta la\n`;
+        code += `# tabla Mangle y rompe el balanceo PCC en conexiones establecidas.\n`;
         code += `# ====================================================\n\n`;
     
         if (isV7) {
@@ -100,6 +104,9 @@
         code += `# 2. Crear Address List de redes conectadas para evitar balancear tráfico local/WAN\n`;
         code += `/ip firewall address-list\n`;
         code += `add address=${inputs.lan_network} list=connected-networks comment="Red LAN"\n`;
+        if (matchType === 'src-address-list') {
+            code += `add address=${inputs.lan_network} list=${inputs.lan_address_list || 'PCC-Clients'} comment="Clientes a balancear (agrega mas rangos/IPs si aplica)"\n`;
+        }
         for (let i = 1; i <= N; i++) {
             const wanGateway = inputs[`wan${i}_gateway`] || `192.168.${i}.1`;
             const parts = wanGateway.split('.');

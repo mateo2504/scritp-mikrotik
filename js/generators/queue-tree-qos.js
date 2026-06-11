@@ -101,7 +101,7 @@
         code += `# o colocar reglas de Bypass de FastTrack antes de la regla principal.\n`;
         code += `# ====================================================\n\n`;
 
-        code += `# 0. REGALAS RECOMENDADAS PARA BYPASS DE FASTTRACK (Filtro)\n`;
+        code += `# 0. REGLAS RECOMENDADAS PARA BYPASS DE FASTTRACK (Filtro)\n`;
         code += `# Coloca estas reglas en '/ip firewall filter' JUSTO ANTES de la regla de FastTrack\n`;
         code += `# para que el tráfico marcado para QoS no sea puenteado por el kernel.\n`;
         code += `# /ip firewall filter\n`;
@@ -117,7 +117,11 @@
 
         let hasAddressList = inputs.prio_streaming || inputs.prio_social || inputs.prio_gaming;
         if (hasAddressList) {
-            code += `# 0.5 ADDRESS LISTS para DNS Snooping (Clasificación de Dominios)\n`;
+            code += `# 0.5 ADDRESS LISTS para clasificación por dominio\n`;
+            code += `# NOTA: una entrada FQDN solo resuelve los registros A exactos de ese nombre.\n`;
+            code += `# CDNs con muchos subdominios (ej: rr1---sn-xxx.googlevideo.com) no quedan cubiertos.\n`;
+            code += `# En RouterOS v7 puedes complementar con '/ip dns static' tipo FWD con\n`;
+            code += `# match-subdomain=yes y address-list=<lista> si el router es el DNS de la LAN.\n`;
             code += `/ip firewall address-list\n`;
             if (inputs.prio_gaming) {
                 code += `# Dominios de Gaming (Riot Games, Epic Games, Roblox, Garena Free Fire, Supercell, Steam)\n`;
@@ -220,7 +224,10 @@
             code += `add chain=prerouting protocol=udp port=8801-8810 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Zoom"\n`;
             code += `add chain=prerouting protocol=udp port=3478,19302-19309 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Google Meet / STUN"\n`;
             code += `add chain=prerouting protocol=udp port=50000-50059 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Teams"\n`;
-            code += `add chain=prerouting dscp=34,36,38 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Video DSCP AF4"\n`;
+            code += `# El matcher dscp solo acepta un valor por regla, se generan AF41/AF42/AF43 por separado\n`;
+            code += `add chain=prerouting dscp=34 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Video DSCP AF41"\n`;
+            code += `add chain=prerouting dscp=36 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Video DSCP AF42"\n`;
+            code += `add chain=prerouting dscp=38 connection-mark=no-mark action=mark-connection new-connection-mark=video-conn passthrough=yes comment="Video DSCP AF43"\n`;
             code += `add chain=prerouting connection-mark=video-conn action=mark-packet new-packet-mark=video passthrough=no\n\n`;
             services.push({ name: 'VIDEO', mark: 'video', priority: priority, limitAtDl: videoLimitDl, limitAtUl: videoLimitUl, qTypeDl: queueDl, qTypeUl: queueUl });
             priority++;
@@ -244,7 +251,9 @@
 
         if (inputs.deprio_bulk) {
             code += `# 1.7 Bulk: descargas grandes (heurística: conexiones que ya cargaron >50MB)\n`;
-            code += `add chain=prerouting connection-bytes=50000000-0 protocol=tcp connection-mark=no-mark action=mark-connection new-connection-mark=bulk-conn passthrough=yes comment="Bulk transfer (>50MB)"\n`;
+            code += `# Re-marca conexiones 'normal-conn': toda conexión nace marcada como normal por la regla\n`;
+            code += `# catch-all, y al superar los 50MB acumulados se degrada aquí a bulk.\n`;
+            code += `add chain=prerouting connection-bytes=50000000-0 protocol=tcp connection-mark=normal-conn action=mark-connection new-connection-mark=bulk-conn passthrough=yes comment="Bulk transfer (>50MB)"\n`;
             code += `add chain=prerouting connection-mark=bulk-conn action=mark-packet new-packet-mark=bulk passthrough=no\n\n`;
         }
 
