@@ -41,6 +41,7 @@ El configurador está dividido en categorías clave que cubren la administració
 * **Servidor PPPoE**: Autenticación punto a punto para clientes de red local.
 * **Hotspot (Portal Cautivo)**: Autenticación de usuarios por tiempo y perfiles para redes WiFi públicas o de invitados.
 * **Perfiles Hotspot (Fichas con Vigencia)**: Perfiles tipo voucher con velocidad, shared-users, timeouts recomendados, MAC cookie y script on-login que elimina la ficha automáticamente al vencer.
+* **Fichas Hotspot (Lote + Impresión)**: Genera lotes de fichas/vouchers con códigos aleatorios: el script .rsc para el router y las fichas listas para imprimir.
 
 ### 🛰️ Operación y Monitoreo
 * **Alertas por Email y Telegram**: Recibe notificaciones automáticas ante fallas de enlaces, logins, etc.
