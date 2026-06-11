@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fichas Hotspot (Lote + Impresión) - MikroTik Script Builder</title>
+    <meta name="description" content="Generador de lotes de fichas/vouchers Hotspot para MikroTik: script .rsc con los usuarios y fichas listas para imprimir con código, WiFi, precio y vigencia.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <style>
+        .voucher-panel { margin-top: 24px; }
+        .voucher-toolbar { display: flex; gap: 10px; align-items: center; }
+        .voucher-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 12px;
+            padding: 16px;
+            max-height: 480px;
+            overflow-y: auto;
+        }
+        .voucher {
+            background: #ffffff;
+            color: #111;
+            border: 1px dashed #999;
+            border-radius: 6px;
+            padding: 10px 12px;
+            font-family: 'Inter', Arial, sans-serif;
+        }
+        .voucher .v-head {
+            font-weight: 700;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 4px;
+            margin-bottom: 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .voucher .v-price { color: #0a7d32; }
+        .voucher .v-cred { font-size: 0.8rem; margin: 2px 0; }
+        .voucher .v-cred b { font-family: 'JetBrains Mono', monospace; font-size: 0.95rem; letter-spacing: 1px; }
+        .voucher .v-code { text-align: center; margin: 6px 0; }
+        .voucher .v-code b { font-size: 1.25rem; letter-spacing: 3px; }
+        .voucher .v-plan { font-size: 0.72rem; text-align: center; color: #444; margin-top: 4px; }
+        .voucher .v-foot { font-size: 0.62rem; color: #777; text-align: center; margin-top: 5px; border-top: 1px solid #eee; padding-top: 4px; }
+    </style>
+</head>
+<body data-script="hotspot-vouchers">
+    <div class="app-container">
+        <main class="app-main">
+            <header class="main-header">
+                <div class="header-left">
+                    <a href="index.html" class="back-btn">
+                        <span class="btn-icon">←</span> Volver al Menú
+                    </a>
+                    <div class="header-title">
+                        <h2 id="current-script-title">Fichas Hotspot (Lote + Impresión)</h2>
+                        <p id="current-script-description">Lote de fichas/vouchers: script .rsc para el router y fichas listas para imprimir.</p>
+                    </div>
+                </div>
+                <div class="global-controls">
+                    <div class="version-selector-container">
+                        <span class="label-text">RouterOS:</span>
+                        <div class="version-toggle">
+                            <input type="radio" name="routeros-version" id="ros-v6" value="v6">
+                            <label for="ros-v6">v6</label>
+                            <input type="radio" name="routeros-version" id="ros-v7" value="v7" checked>
+                            <label for="ros-v7">v7</label>
+                            <div class="toggle-slider"></div>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <div class="workspace-grid">
+                <section class="config-panel card">
+                    <div class="card-header">
+                        <h3>Configuración de Parámetros</h3>
+                        <span class="badge">Ajustes</span>
+                    </div>
+                    <form id="script-form" autocomplete="off" onsubmit="event.preventDefault();">
+                        <div id="dynamic-inputs"></div>
+                    </form>
+                </section>
+
+                <section class="preview-panel card">
+                    <div class="card-header code-header">
+                        <div class="file-info">
+                            <span class="file-icon">📄</span>
+                            <span class="file-name" id="script-file-name">mikrotik_hotspot_fichas.rsc</span>
+                        </div>
+                        <div class="action-buttons">
+                            <button id="btn-copy" class="btn btn-secondary">
+                                <span class="btn-icon">📋</span> <span class="btn-text">Copiar</span>
+                            </button>
+                            <button id="btn-download" class="btn btn-primary">
+                                <span class="btn-icon">📥</span> Descargar .rsc
+                            </button>
+                        </div>
+                    </div>
+                    <div class="code-container">
+                        <div class="code-numbers" id="code-line-numbers"></div>
+                        <pre><code id="code-output" class="language-rsc"># Cargando script...</code></pre>
+                    </div>
+                </section>
+            </div>
+
+            <section class="card voucher-panel">
+                <div class="card-header">
+                    <h3>🎟️ Vista Previa de Fichas <span class="badge" id="voucher-count-label">0 fichas</span></h3>
+                    <div class="voucher-toolbar action-buttons">
+                        <button id="btn-regen-codes" class="btn btn-secondary">
+                            <span class="btn-icon">🎲</span> Regenerar códigos
+                        </button>
+                        <button id="btn-print-vouchers" class="btn btn-primary">
+                            <span class="btn-icon">🖨️</span> Imprimir fichas
+                        </button>
+                    </div>
+                </div>
+                <div class="voucher-grid" id="voucher-preview"></div>
+            </section>
+        </main>
+    </div>
+    <script src="js/core.js"></script>
+    <script src="js/generators/hotspot-vouchers.js"></script>
+</body>
+</html>
