@@ -112,17 +112,19 @@
 <title>Fichas Hotspot - ${escapeHtml(lastInputs.wifi_name || 'WiFi')}</title>
 <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: Arial, Helvetica, sans-serif; background: #fff; color: #000; padding: 8mm; }
-    .sheet { display: flex; flex-wrap: wrap; gap: 4mm; }
-    .voucher { width: 62mm; border: 1px dashed #888; border-radius: 2mm; padding: 3mm; page-break-inside: avoid; }
-    .v-head { font-size: 3.6mm; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 1.5mm; margin-bottom: 2mm; display: flex; justify-content: space-between; align-items: center; }
-    .v-price { font-size: 3.6mm; }
-    .v-cred { font-size: 3.4mm; margin: 1mm 0; }
-    .v-cred b { font-family: 'Courier New', monospace; font-size: 4.2mm; letter-spacing: 0.5mm; }
-    .v-code { text-align: center; margin: 2mm 0; }
-    .v-code b { font-size: 6mm; letter-spacing: 1mm; }
-    .v-plan { font-size: 3mm; text-align: center; color: #333; margin-top: 1.5mm; }
-    .v-foot { font-size: 2.4mm; color: #666; text-align: center; margin-top: 1.5mm; border-top: 1px solid #eee; padding-top: 1mm; }
+    @page { size: letter; margin: 7mm; }
+    body { font-family: Arial, Helvetica, sans-serif; background: #fff; color: #000; padding: 7mm; }
+    /* 4 columnas exactas en hoja carta (215.9mm - márgenes) */
+    .sheet { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3mm; }
+    .voucher { border: 1px dashed #888; border-radius: 2mm; padding: 2.5mm; page-break-inside: avoid; break-inside: avoid; }
+    .v-head { font-size: 3.2mm; font-weight: bold; border-bottom: 1px solid #ccc; padding-bottom: 1.2mm; margin-bottom: 1.5mm; display: flex; justify-content: space-between; align-items: center; gap: 1mm; }
+    .v-price { font-size: 3.2mm; white-space: nowrap; }
+    .v-cred { font-size: 3mm; margin: 0.8mm 0; }
+    .v-cred b { font-family: 'Courier New', monospace; font-size: 3.6mm; letter-spacing: 0.4mm; word-break: break-all; }
+    .v-code { text-align: center; margin: 1.5mm 0; }
+    .v-code b { font-size: 5mm; letter-spacing: 0.8mm; }
+    .v-plan { font-size: 2.6mm; text-align: center; color: #333; margin-top: 1.2mm; }
+    .v-foot { font-size: 2.2mm; color: #666; text-align: center; margin-top: 1.2mm; border-top: 1px solid #eee; padding-top: 0.8mm; }
     .print-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 6mm; font-size: 3.2mm; color: #555; }
     .print-bar button { font-size: 3.6mm; padding: 2mm 5mm; cursor: pointer; }
     @media print { body { padding: 0; } .print-bar { display: none; } }
