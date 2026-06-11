@@ -10,7 +10,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <style>
-        .voucher-panel { margin-top: 24px; }
+        /* El layout base fija .app-main a 100vh sin scroll (pensado para 2 paneles).
+           Esta página tiene un tercer panel (fichas), así que habilitamos scroll
+           y damos al grid superior la altura de una pantalla. */
+        .app-main { height: auto; min-height: 100vh; overflow-y: auto; }
+        .workspace-grid { flex: none; height: calc(100vh - 120px); min-height: 520px; }
+        .voucher-panel { flex: none; margin: 0 40px 32px; }
         .voucher-toolbar { display: flex; gap: 10px; align-items: center; }
         .voucher-grid {
             display: grid;
