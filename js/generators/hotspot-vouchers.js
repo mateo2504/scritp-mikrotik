@@ -96,7 +96,7 @@
         const mode = inputs.mode || 'code';
         container.innerHTML = batch.map(v => voucherCardHtml(v, inputs, mode)).join('');
         const counter = document.getElementById('voucher-count-label');
-        if (counter) counter.innerText = `${batch.length} fichas`;
+        if (counter) counter.textContent = `${batch.length} fichas`;
     }
 
     function printVouchers() {
@@ -123,14 +123,20 @@
     .v-code b { font-size: 6mm; letter-spacing: 1mm; }
     .v-plan { font-size: 3mm; text-align: center; color: #333; margin-top: 1.5mm; }
     .v-foot { font-size: 2.4mm; color: #666; text-align: center; margin-top: 1.5mm; border-top: 1px solid #eee; padding-top: 1mm; }
-    @media print { body { padding: 0; } }
+    .print-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 6mm; font-size: 3.2mm; color: #555; }
+    .print-bar button { font-size: 3.6mm; padding: 2mm 5mm; cursor: pointer; }
+    @media print { body { padding: 0; } .print-bar { display: none; } }
 </style>
 </head>
 <body>
+<div class="print-bar">
+    <button onclick="window.print()">🖨️ Imprimir</button>
+    <span>Si el diálogo de impresión no se abre solo, pulsa el botón.</span>
+</div>
 <div class="sheet">
 ${cards}
 </div>
-<script>window.onload = function () { window.print(); };<\/script>
+<script>setTimeout(function () { window.focus(); window.print(); }, 350);<\/script>
 </body>
 </html>`);
         win.document.close();
