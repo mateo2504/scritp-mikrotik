@@ -80,8 +80,8 @@ function updateScript() {
         }
     });
 
-    // PCC/Failover: lectura de los inputs WAN dinámicos generados después de wan_count
-    if (currentScript === 'pcc' || currentScript === 'failover') {
+    // PCC/Failover/ECMP: lectura de los inputs WAN dinámicos generados después de wan_count
+    if (currentScript === 'pcc' || currentScript === 'failover' || currentScript === 'ecmp') {
         const wanCount = parseInt(currentInputs.wan_count || 2);
         const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4", "1.0.0.1", "4.2.2.1", "4.2.2.2", "208.67.220.220", "149.112.112.112"];
 
@@ -109,8 +109,8 @@ function updateScript() {
                     : `192.168.${i}.1`;
             }
 
-            const pccRecursive = currentScript === 'pcc' && (currentInputs.recursive_routes || formValues['pcc_recursive_routes']) === 'yes';
-            if (currentScript === 'failover' || pccRecursive) {
+            const recursiveWan = (currentScript === 'pcc' || currentScript === 'ecmp') && (currentInputs.recursive_routes || formValues[`${currentScript}_recursive_routes`]) === 'yes';
+            if (currentScript === 'failover' || recursiveWan) {
                 const hostId = `ping_host${i}`;
                 const hostEl = document.getElementById(hostId);
                 if (hostEl) {
@@ -151,7 +151,7 @@ function initializeFormValues(scriptKey) {
         if (formValues[key] === undefined) formValues[key] = input.default;
     });
 
-    if (scriptKey === 'pcc' || scriptKey === 'failover') {
+    if (scriptKey === 'pcc' || scriptKey === 'failover' || scriptKey === 'ecmp') {
         const wanCountKey = `${scriptKey}_wan_count`;
         if (formValues[wanCountKey] === undefined) formValues[wanCountKey] = "2";
         const hostDefaults = ["8.8.8.8", "1.1.1.1", "9.9.9.9", "208.67.222.222", "8.8.4.4", "1.0.0.1", "4.2.2.1", "4.2.2.2", "208.67.220.220", "149.112.112.112"];
@@ -346,8 +346,8 @@ function renderDynamicWanFields(N, container) {
         appendDynamicTextField(wanFieldsContainer, `wan${i}_interface`, `Interfaz WAN ${i}`, `ether${i}`);
         appendDynamicTextField(wanFieldsContainer, `wan${i}_gateway`, `Gateway WAN ${i}`, `192.168.${i}.1`);
 
-        const pccRecursive = currentScript === 'pcc' && formValues['pcc_recursive_routes'] === 'yes';
-        if (currentScript === 'failover' || pccRecursive) {
+        const recursiveWan = (currentScript === 'pcc' || currentScript === 'ecmp') && formValues[`${currentScript}_recursive_routes`] === 'yes';
+        if (currentScript === 'failover' || recursiveWan) {
             appendDynamicTextField(wanFieldsContainer, `ping_host${i}`, `Host Monitoreo WAN ${i}`, hostDefaults[i - 1] || "8.8.8.8");
         }
     }

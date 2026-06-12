@@ -11,6 +11,7 @@ El configurador está dividido en categorías clave que cubren la administració
 
 ### 🛣️ Enrutamiento Avanzado
 * **Balanceo PCC (Múltiples WAN)**: Distribuye el tráfico equitativamente entre 2 y 5 líneas de Internet.
+* **Balanceo ECMP (Multi-WAN)**: Rutas de igual costo con pesos por línea y failover automático por check-gateway o rutas recursivas. Sin mangle.
 * **Failover Recursivo**: Monitoreo inteligente mediante Ping a hosts externos (ej: Google DNS) con conmutación automática.
 * **Policy Based Routing (PBR)**: Ruteo por políticas para desviar tráfico específico (IPs, interfaces, puertos) por una WAN dedicada (soporta Mangle y Routing Rules en v7).
 
