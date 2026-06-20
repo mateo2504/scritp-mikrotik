@@ -6,7 +6,13 @@
         fileName: 'mikrotik_reuso.rsc',
         inputs: [
             { id: 'parent_name', label: 'Nombre del grupo', type: 'text', default: 'PLAN-100M-REUSO-1A4' },
+            { id: 'target_mode', label: 'Cómo ingresar los clientes', type: 'select', default: 'manual', options: [
+                { value: 'manual', label: 'Lista de IPs' },
+                { value: 'range', label: 'Rango de IPs' }
+            ] },
             { id: 'client_targets', label: 'Clientes (IP o subred)', type: 'textarea', default: '192.168.88.101/32\n192.168.88.102/32\n192.168.88.103/32\n192.168.88.104/32', hint: 'Una IP por línea; también acepta comas.' },
+            { id: 'range_start', label: 'Primera IP del rango', type: 'text', default: '192.168.88.101', hint: 'Se generará una cola /32 para esta IP y las siguientes.' },
+            { id: 'range_end', label: 'Última IP del rango', type: 'text', default: '192.168.88.104', hint: 'Máximo 256 direcciones por rango.' },
             { id: 'shared_up', label: 'Capacidad compartida de subida', type: 'text', default: '100M', hint: 'Máximo de la cola padre.' },
             { id: 'shared_down', label: 'Capacidad compartida de bajada', type: 'text', default: '100M', hint: 'Máximo de la cola padre.' },
             { id: 'reuse_ratio', label: 'Factor de reuso 1 a N', type: 'text', default: '4', hint: 'Ejemplo: 4 equivale a reuso 1:4.' },
@@ -33,6 +39,42 @@
             .filter(Boolean))];
     }
 
+    function ipToNumber(value) {
+        const octets = String(value || '').trim().split('.');
+        if (octets.length !== 4) return null;
+        const numbers = octets.map(octet => Number(octet));
+        if (numbers.some((octet, index) => !Number.isInteger(octet) || octet < 0 || octet > 255 || String(numbers[index]) !== octets[index])) {
+            return null;
+        }
+        return numbers.reduce((result, octet) => result * 256 + octet, 0);
+    }
+
+    function numberToIp(value) {
+        return [24, 16, 8, 0]
+            .map(shift => Math.floor(value / (2 ** shift)) % 256)
+            .join('.');
+    }
+
+    function targetsFromRange(startValue, endValue) {
+        const start = ipToNumber(startValue);
+        const end = ipToNumber(endValue);
+        if (start === null || end === null) {
+            return { targets: [], error: 'La IP inicial o final no es una dirección IPv4 válida.' };
+        }
+        if (end < start) {
+            return { targets: [], error: 'La IP final debe ser igual o mayor que la IP inicial.' };
+        }
+        const count = end - start + 1;
+        if (count > 256) {
+            return { targets: [], error: `El rango contiene ${count} direcciones; el máximo permitido es 256.` };
+        }
+        const targets = [];
+        for (let current = start; current <= end; current++) {
+            targets.push(`${numberToIp(current)}/32`);
+        }
+        return { targets, error: null };
+    }
+
     function parseRate(value) {
         const match = String(value || '').trim().match(/^(\d+(?:\.\d+)?)\s*([kKmMgG])?$/);
         if (!match) return null;
@@ -49,7 +91,10 @@
     }
 
     function generate(inputs, version) {
-        const targets = parseTargets(inputs.client_targets);
+        const rangeResult = inputs.target_mode === 'range'
+            ? targetsFromRange(inputs.range_start, inputs.range_end)
+            : { targets: parseTargets(inputs.client_targets), error: null };
+        const targets = rangeResult.targets;
         const ratio = Math.max(1, parseInt(inputs.reuse_ratio, 10) || 1);
         const sharedUp = parseRate(inputs.shared_up);
         const sharedDown = parseRate(inputs.shared_down);
@@ -65,6 +110,9 @@
         code += '# Orden: ejecute el script completo para crear padre e hijos\n';
         code += '# ====================================================\n\n';
 
+        if (rangeResult.error) {
+            return `${code}# ERROR: ${rangeResult.error}\n`;
+        }
         if (!targets.length) {
             return `${code}# ERROR: agregue al menos una IP de cliente.\n`;
         }
