@@ -239,6 +239,12 @@ function renderInputs() {
             if (method !== 'pppoe' && pppoeFields.includes(input.id)) return;
         }
 
+        if (currentScript === 'reuso') {
+            const targetMode = formValues['reuso_target_mode'] || 'manual';
+            if (input.id === 'client_targets' && targetMode !== 'manual') return;
+            if ((input.id === 'range_start' || input.id === 'range_end') && targetMode !== 'range') return;
+        }
+
         const group = document.createElement('div');
         const storedVal = formValues[`${currentScript}_${input.id}`];
         const val = storedVal !== undefined ? storedVal : (input.default !== undefined ? input.default : '');
@@ -278,7 +284,7 @@ function renderInputs() {
             const select = group.querySelector('select');
             select.addEventListener('change', () => {
                 formValues[`${currentScript}_${input.id}`] = select.value;
-                if (input.id === 'wan_count' || input.id === 'lan_match_type' || input.id === 'recursive_routes' || input.id === 'target_type' || input.id === 'method') {
+                if (input.id === 'wan_count' || input.id === 'lan_match_type' || input.id === 'recursive_routes' || input.id === 'target_type' || input.id === 'target_mode' || input.id === 'method') {
                     renderInputs();
                 }
                 updateScript();
