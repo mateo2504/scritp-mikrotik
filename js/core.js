@@ -239,8 +239,9 @@ function renderInputs() {
             if (method !== 'pppoe' && pppoeFields.includes(input.id)) return;
         }
 
-        if (currentScript === 'reuso') {
-            const targetMode = formValues['reuso_target_mode'] || 'manual';
+        if (currentScript === 'reuso' || currentScript === 'pcq-equitativo') {
+            const defaultTargetMode = currentScript === 'pcq-equitativo' ? 'range' : 'manual';
+            const targetMode = formValues[`${currentScript}_target_mode`] || defaultTargetMode;
             if (input.id === 'client_targets' && targetMode !== 'manual') return;
             if ((input.id === 'range_start' || input.id === 'range_end') && targetMode !== 'range') return;
         }
