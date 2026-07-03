@@ -27,7 +27,7 @@
                     </div>
                 </div>
                 <!-- RouterOS version select is kept for consistency, but rate-limit syntax is identical on both -->
-                <div class="global-controls" style="display: none;">
+                <div class="global-controls is-hidden">
                     <div class="version-selector-container">
                         <span class="label-text">RouterOS:</span>
                         <div class="version-toggle">
@@ -48,7 +48,7 @@
                         <h3>Configuración de Parámetros</h3>
                         <span class="badge">Ajustes</span>
                     </div>
-                    <form id="script-form" autocomplete="off" onsubmit="event.preventDefault();">
+                    <form id="script-form" autocomplete="off">
                         <div id="dynamic-inputs"></div>
                     </form>
                 </section>
