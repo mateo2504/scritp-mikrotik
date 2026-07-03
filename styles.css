@@ -937,3 +937,8 @@ input[type="checkbox"] {
     transform: translateX(-2px);
 }
 
+
+/* Utilidad para ocultar elementos sin estilos inline (compatible con CSP estricta) */
+.is-hidden {
+    display: none !important;
+}

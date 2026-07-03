@@ -297,9 +297,10 @@ function renderInputs() {
                     ${input.label}
                     ${input.hint ? `<span class="hint">${input.hint}</span>` : ''}
                 </label>
-                <textarea id="${input.id}" class="form-control" rows="6">${val}</textarea>
+                <textarea id="${input.id}" class="form-control" rows="6"></textarea>
             `;
             const textarea = group.querySelector('textarea');
+            textarea.value = val;
             textarea.addEventListener('input', () => {
                 formValues[`${currentScript}_${input.id}`] = textarea.value;
                 updateScript();
@@ -311,9 +312,11 @@ function renderInputs() {
                     ${input.label}
                     ${input.hint ? `<span class="hint">${input.hint}</span>` : ''}
                 </label>
-                <input type="text" id="${input.id}" class="form-control" value="${val}" placeholder="${input.default || ''}">
+                <input type="text" id="${input.id}" class="form-control">
             `;
             const textInput = group.querySelector('input');
+            textInput.value = val;
+            textInput.placeholder = input.default || '';
             textInput.addEventListener('input', () => {
                 formValues[`${currentScript}_${input.id}`] = textInput.value;
                 updateScript();
@@ -369,9 +372,10 @@ function appendDynamicTextField(parent, id, label, defaultVal) {
     group.className = 'form-group';
     group.innerHTML = `
         <label for="${id}">${label}</label>
-        <input type="text" id="${id}" class="form-control" value="${val}">
+        <input type="text" id="${id}" class="form-control">
     `;
     const input = group.querySelector('input');
+    input.value = val;
     input.addEventListener('input', () => {
         formValues[`${currentScript}_${id}`] = input.value;
         updateScript();
@@ -417,6 +421,9 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!pageScript) return;
 
     currentScript = pageScript;
+
+    const scriptForm = document.getElementById('script-form');
+    if (scriptForm) scriptForm.addEventListener('submit', (e) => e.preventDefault());
 
     // Solo se inicializa la página actual (cada HTML carga solo su generador)
     initializeFormValues(currentScript);
