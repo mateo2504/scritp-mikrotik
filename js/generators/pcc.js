@@ -51,6 +51,18 @@
         { id: "lan_interface_list", label: "Interface List LAN", type: "text", default: "LAN", hint: "Nombre de la Interface List en /interface list" },
         { id: "lan_address_list", label: "Address List LAN", type: "text", default: "PCC-Clients", hint: "Nombre de la Address List en /ip firewall address-list" },
         { id: "lan_network", label: "Red LAN (CIDR)", type: "text", default: "192.168.88.0/24", hint: "Rango local para exclusión de balanceo" },
+        {
+            id: "hotspot_compatibility",
+            label: "Compatibilidad con Hotspot (limitada)",
+            type: "select",
+            options: [
+                { value: "no", label: "No" },
+                { value: "yes", label: "Sí: preservar portal e inicios de sesión" }
+            ],
+            default: "no",
+            hint: "Evita marcar clientes Hotspot no autenticados. El portal usa la ruta principal; el PCC se aplica después de autenticarse. RouterOS no garantiza PCC completo con Hotspot."
+        },
+        { id: "hotspot_interface", label: "Interfaz Hotspot", type: "text", default: "bridge-hotspot", hint: "Solo se usa al activar la compatibilidad Hotspot; debe ser la interfaz o bridge del portal." },
         { 
             id: "pcc_type", 
             label: "Clasificador PCC", 
@@ -69,6 +81,8 @@
     function generate(inputs, version) {
         const isV7 = version === 'v7';
         const N = parseInt(inputs.wan_count || 2);
+        const hotspotCompatibility = inputs.hotspot_compatibility === 'yes';
+        const hotspotInterface = inputs.hotspot_interface || 'bridge-hotspot';
         
         const matchType = inputs.lan_match_type || 'in-interface';
         let lanMatchParam = '';
@@ -89,6 +103,11 @@
         code += `# IMPORTANTE: Desactiva FastTrack en el firewall (o agrega reglas de\n`;
         code += `# bypass antes de la regla fasttrack-connection). FastTrack salta la\n`;
         code += `# tabla Mangle y rompe el balanceo PCC en conexiones establecidas.\n`;
+        if (hotspotCompatibility) {
+            code += `# HOTSPOT: el portal y clientes no autenticados se excluyen del PCC y usan\n`;
+            code += `# la tabla principal. Tras autenticarse, las conexiones nuevas pueden usar PCC.\n`;
+            code += `# RouterOS usa web-proxy para Hotspot y no garantiza balanceo PCC completo.\n`;
+        }
         code += `# ====================================================\n\n`;
     
         if (isV7) {
@@ -121,6 +140,10 @@
         code += `/ip firewall mangle\n`;
         code += `# Aceptar tráfico hacia redes locales/conectadas sin marcar\n`;
         code += `add chain=prerouting dst-address-list=connected-networks ${lanMatchParam} action=accept comment="Excluir trafico local y WANs conectadas"\n\n`;
+        if (hotspotCompatibility) {
+            code += `# No marcar portal ni clientes Hotspot no autenticados: usan la tabla main\n`;
+            code += `add chain=prerouting in-interface=${hotspotInterface} hotspot=!auth action=accept comment="Hotspot: portal y no autenticados por main"\n\n`;
+        }
     
         code += `# Mantener las conexiones entrantes en su respectiva interfaz WAN de origen\n`;
         for (let i = 1; i <= N; i++) {
