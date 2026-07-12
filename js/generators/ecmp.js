@@ -36,10 +36,10 @@
             },
             {
                 id: "wan_weights",
-                label: "Pesos por WAN (opcional)",
+                label: "Pesos por WAN (solo RouterOS v6)",
                 type: "text",
                 default: "",
-                hint: "Separados por coma y en orden (ej.: 2,1). Los pesos omitidos valen 1; máximo 8 por WAN."
+                hint: "Separados por coma y en orden (ej.: 2,1). En RouterOS v7 los gateways repetidos se deduplican, por lo que ECMP es siempre equitativo."
             },
             {
                 id: "verify_default_routes",
@@ -128,7 +128,10 @@
             errors.push('La cantidad de WANs debe estar entre 2 y 10.');
         }
         const N = Number.isInteger(count) && count >= 2 && count <= 10 ? count : 2;
-        const weights = parseWeights(inputs.wan_weights, N, errors);
+        const requestedWeights = parseWeights(inputs.wan_weights, N, errors);
+        // RouterOS v7 deduplica next-hops iguales dentro de ECMP. Mantener pesos allí
+        // daría una expectativa falsa, por eso v7 se genera siempre con una ruta por WAN.
+        const weights = isV7 ? Array(N).fill(1) : requestedWeights;
         const wans = [];
         const interfaces = new Set();
         const hosts = new Set();
@@ -159,12 +162,6 @@
 
         if (errors.length) return validationError(errors);
 
-        const gateways = [];
-        wans.forEach(wan => {
-            const target = recursive ? wan.host : wan.gateway;
-            for (let repeat = 0; repeat < wan.weight; repeat++) gateways.push(target);
-        });
-
         let code = '# ====================================================\n';
         code += `# ${TAG}: Balanceo ECMP (${N} WANs)\n`;
         code += `# RouterOS: ${version.toUpperCase()} | Generado: ${new Date().toLocaleDateString()}\n`;
@@ -173,6 +170,9 @@
         code += '# Requisitos: gateways IPv4 estáticos y una ruta conectada hacia cada gateway.\n';
         code += '# No uses este esquema sin marcado de conexiones para publicar servicios,\n';
         code += '# port-forwarding o VPNs que deban responder por la misma WAN de entrada.\n';
+        if (isV7 && inputs.wan_weights && String(inputs.wan_weights).trim()) {
+            code += '# NOTA v7: RouterOS deduplica gateways ECMP repetidos; se aplica reparto equitativo.\n';
+        }
         code += '# ====================================================\n\n';
 
         code += '# 0. Protección contra rutas por defecto ajenas\n';
@@ -208,11 +208,22 @@
             wans.forEach((wan, index) => {
                 code += `add dst-address=${wan.host}/32 gateway=${wan.gateway} scope=10 comment="${TAG}: control WAN${index + 1}"\n`;
             });
-            code += '# La ruta por defecto se resuelve contra los hosts de control (target-scope=11).\n';
-            code += `add dst-address=0.0.0.0/0 gateway=${gateways.join(',')} check-gateway=ping target-scope=11 distance=1 comment="${TAG}: default recursiva"\n`;
+            code += '# Una ruta por WAN: mismas distancia y destino hacen que RouterOS forme ECMP.\n';
+            wans.forEach((wan, index) => {
+                for (let repeat = 0; repeat < wan.weight; repeat++) {
+                    const suffix = wan.weight > 1 ? ` peso ${repeat + 1}` : '';
+                    code += `add dst-address=0.0.0.0/0 gateway=${wan.host} check-gateway=ping target-scope=11 distance=1 comment="${TAG}: default recursiva WAN${index + 1}${suffix}"\n`;
+                }
+            });
         } else {
             code += '# check-gateway=ping solo comprueba el gateway inmediato; no garantiza Internet real.\n';
-            code += `add dst-address=0.0.0.0/0 gateway=${gateways.join(',')} check-gateway=ping distance=1 comment="${TAG}: default directa"\n`;
+            code += '# Una ruta por WAN: mismas distancia y destino hacen que RouterOS forme ECMP.\n';
+            wans.forEach((wan, index) => {
+                for (let repeat = 0; repeat < wan.weight; repeat++) {
+                    const suffix = wan.weight > 1 ? ` peso ${repeat + 1}` : '';
+                    code += `add dst-address=0.0.0.0/0 gateway=${wan.gateway} check-gateway=ping distance=1 comment="${TAG}: default directa WAN${index + 1}${suffix}"\n`;
+                }
+            });
         }
         code += '\n';
 
