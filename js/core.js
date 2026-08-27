@@ -24,6 +24,14 @@ let routerOsVersion = 'v7';
 const formValues = {};
 let currentGeneratedCode = '';
 
+function defaultWanPrefix(gateway) {
+    const octets = String(gateway || '').trim().split('.');
+    if (octets.length === 4 && octets.every(octet => /^\d{1,3}$/.test(octet) && Number(octet) >= 0 && Number(octet) <= 255)) {
+        return `${octets[0]}.${octets[1]}.${octets[2]}.0/24`;
+    }
+    return '';
+}
+
 // Syntax Highlighter for RouterOS scripting language (single-pass to prevent nested tag corruption)
 function highlightRSC(code) {
     let escaped = code
@@ -109,6 +117,19 @@ function updateScript() {
                     : `192.168.${i}.1`;
             }
 
+            if (currentScript === 'pcc') {
+                const networkId = `wan${i}_network`;
+                const networkEl = document.getElementById(networkId);
+                if (networkEl) {
+                    currentInputs[networkId] = networkEl.value;
+                    formValues[`${currentScript}_${networkId}`] = networkEl.value;
+                } else if (formValues[`${currentScript}_${networkId}`] !== undefined) {
+                    currentInputs[networkId] = formValues[`${currentScript}_${networkId}`];
+                } else {
+                    currentInputs[networkId] = defaultWanPrefix(currentInputs[gatewayId]);
+                }
+            }
+
             const recursiveWan = (currentScript === 'pcc' || currentScript === 'ecmp') && (currentInputs.recursive_routes || formValues[`${currentScript}_recursive_routes`]) === 'yes';
             if (currentScript === 'failover' || recursiveWan) {
                 const hostId = `ping_host${i}`;
@@ -162,7 +183,14 @@ function initializeFormValues(scriptKey) {
             if (formValues[wanInterfaceKey] === undefined) formValues[wanInterfaceKey] = `ether${i}`;
             if (formValues[wanGatewayKey] === undefined) formValues[wanGatewayKey] = `192.168.${i}.1`;
 
-            if (scriptKey === 'failover') {
+            if (scriptKey === 'pcc') {
+                const wanNetworkKey = `${scriptKey}_wan${i}_network`;
+                if (formValues[wanNetworkKey] === undefined) {
+                    formValues[wanNetworkKey] = defaultWanPrefix(formValues[wanGatewayKey]);
+                }
+            }
+
+            if (scriptKey === 'failover' || scriptKey === 'pcc' || scriptKey === 'ecmp') {
                 const pingHostKey = `${scriptKey}_ping_host${i}`;
                 if (formValues[pingHostKey] === undefined) {
                     formValues[pingHostKey] = hostDefaults[i - 1] || "8.8.8.8";
@@ -205,6 +233,7 @@ function renderInputs() {
             if (input.id === 'lan_interface' && matchType !== 'in-interface') return;
             if (input.id === 'lan_interface_list' && matchType !== 'in-interface-list') return;
             if (input.id === 'lan_address_list' && matchType !== 'src-address-list') return;
+            if (input.id === 'hotspot_interface' && formValues['pcc_hotspot_compatibility'] !== 'yes') return;
         }
 
         if (currentScript === 'pbr') {
@@ -285,7 +314,7 @@ function renderInputs() {
             const select = group.querySelector('select');
             select.addEventListener('change', () => {
                 formValues[`${currentScript}_${input.id}`] = select.value;
-                if (input.id === 'wan_count' || input.id === 'lan_match_type' || input.id === 'recursive_routes' || input.id === 'target_type' || input.id === 'target_mode' || input.id === 'method') {
+                if (input.id === 'wan_count' || input.id === 'lan_match_type' || input.id === 'recursive_routes' || input.id === 'hotspot_compatibility' || input.id === 'target_type' || input.id === 'target_mode' || input.id === 'method') {
                     renderInputs();
                 }
                 updateScript();
@@ -355,6 +384,16 @@ function renderDynamicWanFields(N, container) {
 
         appendDynamicTextField(wanFieldsContainer, `wan${i}_interface`, `Interfaz WAN ${i}`, `ether${i}`);
         appendDynamicTextField(wanFieldsContainer, `wan${i}_gateway`, `Gateway WAN ${i}`, `192.168.${i}.1`);
+        if (currentScript === 'pcc') {
+            const storedGateway = formValues[`${currentScript}_wan${i}_gateway`] || `192.168.${i}.1`;
+            appendDynamicTextField(
+                wanFieldsContainer,
+                `wan${i}_network`,
+                `Prefijo WAN ${i} (CIDR)`,
+                defaultWanPrefix(storedGateway),
+                'Usa la máscara real del ISP (/30, /29, /24). Vacío = no excluir esa subred. No se recalcula al cambiar el gateway.'
+            );
+        }
 
         const recursiveWan = (currentScript === 'pcc' || currentScript === 'ecmp') && formValues[`${currentScript}_recursive_routes`] === 'yes';
         if (currentScript === 'failover' || recursiveWan) {
@@ -364,14 +403,17 @@ function renderDynamicWanFields(N, container) {
     container.appendChild(wanFieldsContainer);
 }
 
-function appendDynamicTextField(parent, id, label, defaultVal) {
+function appendDynamicTextField(parent, id, label, defaultVal, hint) {
     const stored = formValues[`${currentScript}_${id}`];
     const val = stored !== undefined ? stored : defaultVal;
 
     const group = document.createElement('div');
     group.className = 'form-group';
     group.innerHTML = `
-        <label for="${id}">${label}</label>
+        <label for="${id}">
+            ${label}
+            ${hint ? `<span class="hint">${hint}</span>` : ''}
+        </label>
         <input type="text" id="${id}" class="form-control">
     `;
     const input = group.querySelector('input');
