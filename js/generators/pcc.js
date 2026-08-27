@@ -233,8 +233,9 @@
         add(`# Etiqueta: ${TAG}. Al reimportar se reemplazan solo reglas con esta etiqueta.`);
         add('# Compatible con cualquier Routerboard (ajusta nombres de interfaces)');
         add('# ====================================================');
-        add('# FastTrack omite Mangle y consulta solo la tabla main: el script restringe');
-        add('# las reglas fasttrack-connection existentes a connection-mark=no-mark.');
+        add('# FastTrack omite Mangle y consulta solo la tabla main. El script inserta');
+        add('# un accept etiquetado delante de fasttrack-connection para conexiones marcadas.');
+        add('# No modifica reglas FastTrack ajenas (p. ej. con connection-mark de QoS).');
         add('# PCC reparte conexiones, no Mbps. Desactiva add-default-route en DHCP/PPPoE');
         add('# WAN para no competir con las rutas generadas aquí.');
         if (hotspotCompatibility) {
@@ -254,9 +255,12 @@
 
         if (isV7) {
             add('# 1. Crear las tablas de enrutamiento con FIB en v7 (si aún no existen)');
+            add('# Si el nombre ya existe sin fib, se activa: una tabla sin FIB no instala rutas.');
             wans.forEach(wan => {
                 add(`:if ([:len [/routing table find where name="${wan.table}"]] = 0) do={`);
                 add(`    /routing table add name=${wan.table} fib`);
+                add('} else={');
+                add(`    /routing table set [/routing table find where name="${wan.table}"] fib=yes`);
                 add('}');
             });
             add();
@@ -346,9 +350,7 @@
         add();
 
         add('# 4. FastTrack: las conexiones marcadas no deben saltarse Mangle');
-        add(':foreach ftId in=[/ip firewall filter find where action=fasttrack-connection] do={');
-        add('    /ip firewall filter set $ftId connection-mark=no-mark');
-        add('}');
+        add('# Solo se añade un bypass etiquetado; no se altera connection-mark de reglas ajenas.');
         add(':local ftIds [/ip firewall filter find where action=fasttrack-connection]');
         add(':if ([:len $ftIds] > 0) do={');
         add('    :local ftId [:pick $ftIds 0]');

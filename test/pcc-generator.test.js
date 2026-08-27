@@ -169,13 +169,20 @@ test('agrega redes extra a connected-networks', () => {
     assertIncludes(script, 'add address=172.16.0.0/12 list=connected-networks');
 });
 
-test('es idempotente y protege FastTrack', () => {
+test('es idempotente y protege FastTrack sin mutar reglas ajenas', () => {
     const script = generate(baseInputs(), 'v7');
     assertIncludes(script, '/ip firewall mangle remove [find where comment~"^MTB-PCC"]');
     assertIncludes(script, '/ip route remove [find where comment~"^MTB-PCC"]');
-    assertIncludes(script, 'connection-mark=no-mark');
     assertIncludes(script, 'action=fasttrack-connection');
     assertIncludes(script, 'connection-mark=!no-mark action=accept');
+    assertNotIncludes(script, '/ip firewall filter set $ftId connection-mark=no-mark');
+});
+
+test('reutiliza tablas v7 existentes activando fib', () => {
+    const script = generate(baseInputs(), 'v7');
+    assertIncludes(script, '/routing table add name=to_ether1 fib');
+    assertIncludes(script, '/routing table set [/routing table find where name="to_ether1"] fib=yes');
+    assertIncludes(script, '/routing table set [/routing table find where name="to_ether2"] fib=yes');
 });
 
 test('ata el gateway IPv4 a su interfaz para evitar WANs con subredes solapadas', () => {
