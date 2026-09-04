@@ -9,18 +9,96 @@
         title: "Balanceo PCC (Múltiples WAN)",
         description: "Distribución de tráfico balanceada entre varias conexiones de Internet (2 a 10 WANs) utilizando marcas de ruta.",
         fileName: "mikrotik_pcc_bal.rsc",
-        inputs: [
+        steps: [
             {
-                id: "recursive_routes",
-                label: "Failover por Internet real (Rutas Recursivas)",
-                type: "select",
-                options: [
-                    { value: "no", label: "No (check-gateway al gateway directo)" },
-                    { value: "yes", label: "Sí (ping a host externo vía ruta recursiva)" }
-                ],
-                default: "no",
-                hint: "Si se habilita, cada WAN monitorea un host público externo. Detecta caídas de Internet aunque el gateway siga activo."
+                id: "wans",
+                step: 1,
+                title: "Líneas WAN y Proveedores",
+                shortTitle: "WANs",
+                icon: "🌐",
+                description: "Configura la cantidad de líneas de Internet, interfaces físicas y puertas de enlace.",
+                requirementTitle: "Requisito Indispensable #1: Subredes distintas y Sin Rutas Dinámicas",
+                requirementText: "1) Cada módem/proveedor DEBE entregar una subred IP distinta (ej. Módem 1: 192.168.1.1, Módem 2: 192.168.2.1). Si tienen la misma IP, cámbiala en el módem antes de conectar.\n2) En MikroTik: desmarca obligatoriamente 'Add Default Route' en los clientes DHCP (/ip dhcp-client) o PPPoE (/interface pppoe-client) de las WAN.",
+                inputIds: ["wan_count"]
             },
+            {
+                id: "lan",
+                step: 2,
+                title: "Red Local (LAN) y Exclusiones",
+                shortTitle: "Red Local",
+                icon: "🏠",
+                description: "Define la red interna de tus usuarios y destinos que jamás deben pasar por el balanceo.",
+                requirementTitle: "Requisito Indispensable #2: Exclusión de Tráfico Local (connected-networks)",
+                requirementText: "El tráfico entre dispositivos locales (LAN, impresoras, servidores, VLANs) y el acceso a los módems debe aceptarse antes de clasificar con PCC. Sin esto, perderás acceso a los módems y Winbox sufrirá caídas continuas.",
+                inputIds: [
+                    "lan_match_type",
+                    "lan_interface",
+                    "lan_interface_list",
+                    "lan_address_list",
+                    "lan_network",
+                    "extra_connected_networks",
+                    "hotspot_compatibility",
+                    "hotspot_interface"
+                ]
+            },
+            {
+                id: "algorithm",
+                step: 3,
+                title: "Modo de Balanceo y Failover",
+                shortTitle: "Balanceo",
+                icon: "⚡",
+                description: "Selecciona el clasificador PCC, detección de caídas y protección contra bypass de FastTrack.",
+                requirementTitle: "Requisito Indispensable #3: FastTrack Bypass y Clasificador Adecuado",
+                requirementText: "FastTrack omite la tabla Mangle por defecto. El script agrega automáticamente una regla de exclusión para que el tráfico marcado sí se balancee. Usa 'Both Addresses and Ports' para navegación general y streaming, o 'Source Address' si tus clientes usan bancos o servicios con validación estricta de IP.",
+                inputIds: ["pcc_type", "recursive_routes"]
+            },
+            {
+                id: "verification",
+                step: 4,
+                title: "Requisitos & Checklist de Pre-vuelo",
+                shortTitle: "Checklist",
+                icon: "✅",
+                description: "Confirma los requisitos indispensables en tu MikroTik antes de aplicar el script generado.",
+                isChecklist: true,
+                checklistItems: [
+                    {
+                        id: "chk_default_route",
+                        title: "Desactivar 'Add Default Route' en WANs",
+                        desc: "En /ip dhcp-client o /interface pppoe-client de cada WAN, 'Add Default Route' debe estar en 'no'. El balanceador gestiona las rutas."
+                    },
+                    {
+                        id: "chk_subnets",
+                        title: "Módems en subredes IP independientes",
+                        desc: "Verifica que ningún módem o proveedor comparta el mismo rango IP (ej. 192.168.1.0/24 y 192.168.2.0/24)."
+                    },
+                    {
+                        id: "chk_lan_ip",
+                        title: "Subred LAN configurada en el MikroTik",
+                        desc: "Tu bridge o interfaz LAN debe tener configurada la IP correspondiente a la red local indicada en el Paso 2."
+                    },
+                    {
+                        id: "chk_backup",
+                        title: "Respaldo (Backup) previo del RouterOS",
+                        desc: "Recomendado: crea un backup desde Files -> Backup o en terminal con '/system backup save name=antes_pcc'."
+                    }
+                ],
+                verificationCommands: [
+                    {
+                        label: "1. Monitoreo de paquetes balanceados (Mangle)",
+                        cmd: '/ip firewall mangle print stats where comment~"MTB-PCC"'
+                    },
+                    {
+                        label: "2. Verificación de tablas y rutas activas",
+                        cmd: '/ip route print detail where comment~"MTB-PCC"'
+                    },
+                    {
+                        label: "3. Comprobar tráfico en tiempo real por WAN",
+                        cmd: '/interface monitor-traffic [find where default-name~"ether"]'
+                    }
+                ]
+            }
+        ],
+        inputs: [
             {
                 id: "wan_count",
                 label: "Cantidad de Líneas WAN",
@@ -37,7 +115,8 @@
                     { value: "10", label: "10 WANs" }
                 ],
                 default: "2",
-                hint: "Número de interfaces WAN a balancear"
+                hint: "Número de interfaces WAN a balancear",
+                step: 1
             },
             {
                 id: "lan_match_type",
@@ -49,18 +128,20 @@
                     { value: "src-address-list", label: "Lista de IPs (src-address-list)" }
                 ],
                 default: "in-interface",
-                hint: "Método para identificar los paquetes que vienen de la LAN"
+                hint: "Método para identificar los paquetes que vienen de la LAN",
+                step: 2
             },
-            { id: "lan_interface", label: "Interfaz LAN", type: "text", default: "bridge-lan", hint: "Red local cableada o bridge LAN" },
-            { id: "lan_interface_list", label: "Interface List LAN", type: "text", default: "LAN", hint: "Nombre de la Interface List en /interface list" },
-            { id: "lan_address_list", label: "Address List LAN", type: "text", default: "PCC-Clients", hint: "Nombre de la Address List en /ip firewall address-list. El script agrega la red LAN; puedes añadir más IPs después." },
-            { id: "lan_network", label: "Red LAN (CIDR)", type: "text", default: "192.168.88.0/24", hint: "Rango local que no debe balancearse (tráfico a esta red usa la tabla main)" },
+            { id: "lan_interface", label: "Interfaz LAN", type: "text", default: "bridge-lan", hint: "Red local cableada o bridge LAN", step: 2 },
+            { id: "lan_interface_list", label: "Interface List LAN", type: "text", default: "LAN", hint: "Nombre de la Interface List en /interface list", step: 2 },
+            { id: "lan_address_list", label: "Address List LAN", type: "text", default: "PCC-Clients", hint: "Nombre de la Address List en /ip firewall address-list. El script agrega la red LAN; puedes añadir más IPs después.", step: 2 },
+            { id: "lan_network", label: "Red LAN (CIDR)", type: "text", default: "192.168.88.0/24", hint: "Rango local que no debe balancearse (tráfico a esta red usa la tabla main)", step: 2 },
             {
                 id: "extra_connected_networks",
                 label: "Otras redes a excluir (CIDR)",
                 type: "textarea",
                 default: "",
-                hint: "VLAN, DMZ, VPN u otros prefijos internos, uno por línea o separados por coma. Si no se listan, el PCC puede enviar ese tráfico por una WAN."
+                hint: "VLAN, DMZ, VPN u otros prefijos internos, uno por línea o separados por coma. Si no se listan, el PCC puede enviar ese tráfico por una WAN.",
+                step: 2
             },
             {
                 id: "hotspot_compatibility",
@@ -71,9 +152,10 @@
                     { value: "yes", label: "Sí: preservar portal e inicios de sesión" }
                 ],
                 default: "no",
-                hint: "MikroTik no considera PCC un método válido con Hotspot (web-proxy usa la tabla main). Esta opción excluye el portal y aplica PCC solo a clientes autenticados."
+                hint: "MikroTik no considera PCC un método válido con Hotspot (web-proxy usa la tabla main). Esta opción excluye el portal y aplica PCC solo a clientes autenticados.",
+                step: 2
             },
-            { id: "hotspot_interface", label: "Interfaz Hotspot", type: "text", default: "bridge-hotspot", hint: "Interfaz o bridge del portal. El PCC se aplica a clientes autenticados de esta interfaz." },
+            { id: "hotspot_interface", label: "Interfaz Hotspot", type: "text", default: "bridge-hotspot", hint: "Interfaz o bridge del portal. El PCC se aplica a clientes autenticados de esta interfaz.", step: 2 },
             {
                 id: "pcc_type",
                 label: "Clasificador PCC",
@@ -84,7 +166,20 @@
                     { value: "src-address", label: "Source Address" }
                 ],
                 default: "both-addresses-and-ports",
-                hint: "Fórmula de clasificación del tráfico. Both Addresses and Ports reparte más; Source Address mantiene cada cliente en la misma WAN."
+                hint: "Fórmula de clasificación del tráfico. Both Addresses and Ports reparte más; Source Address mantiene cada cliente en la misma WAN.",
+                step: 3
+            },
+            {
+                id: "recursive_routes",
+                label: "Failover por Internet real (Rutas Recursivas)",
+                type: "select",
+                options: [
+                    { value: "no", label: "No (check-gateway al gateway directo)" },
+                    { value: "yes", label: "Sí (ping a host externo vía ruta recursiva)" }
+                ],
+                default: "no",
+                hint: "Si se habilita, cada WAN monitorea un host público externo. Detecta caídas de Internet aunque el gateway siga activo.",
+                step: 3
             }
         ]
     };

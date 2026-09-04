@@ -197,4 +197,27 @@ test('rechaza CIDR LAN inválido', () => {
     assertIncludes(script, 'red LAN');
 });
 
+test('definición incluye 4 pasos de Wizard con requisitos indispensables y checklist', () => {
+    const def = context.window.MTB.definition;
+    assert.ok(Array.isArray(def.steps), 'def.steps debe ser un array');
+    assert.equal(def.steps.length, 4, 'debe tener exactamente 4 pasos de Wizard');
+
+    const [s1, s2, s3, s4] = def.steps;
+    assert.equal(s1.step, 1);
+    assert.ok(s1.requirementTitle.includes('Requisito Indispensable'));
+    assert.ok(s1.requirementText.includes('Add Default Route'));
+
+    assert.equal(s2.step, 2);
+    assert.ok(s2.requirementTitle.includes('Exclusión de Tráfico Local'));
+
+    assert.equal(s3.step, 3);
+    assert.ok(s3.requirementTitle.includes('FastTrack Bypass'));
+
+    assert.equal(s4.step, 4);
+    assert.equal(s4.isChecklist, true);
+    assert.ok(s4.checklistItems.length >= 4, 'debe contener al menos 4 ítems de checklist');
+    assert.ok(s4.verificationCommands.length >= 3, 'debe contener comandos de verificación');
+});
+
 console.log(`\n${passed} pruebas PCC OK`);
+
