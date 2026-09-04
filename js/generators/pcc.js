@@ -16,7 +16,7 @@
                 title: "Líneas WAN y Proveedores",
                 shortTitle: "WANs",
                 icon: "🌐",
-                description: "Configura la cantidad de líneas de Internet, interfaces físicas y puertas de enlace.",
+                description: "Indica cuántas líneas de Internet vas a balancear y, por cada una, su interfaz y su gateway.",
                 requirementTitle: "Requisito Indispensable #1: Subredes distintas y Sin Rutas Dinámicas",
                 requirementText: "1) Cada módem/proveedor DEBE entregar una subred IP distinta (ej. Módem 1: 192.168.1.1, Módem 2: 192.168.2.1). Si tienen la misma IP, cámbiala en el módem antes de conectar.\n2) En MikroTik: desmarca obligatoriamente 'Add Default Route' en los clientes DHCP (/ip dhcp-client) o PPPoE (/interface pppoe-client) de las WAN.",
                 inputIds: ["wan_count"]
@@ -27,7 +27,7 @@
                 title: "Red Local (LAN) y Exclusiones",
                 shortTitle: "Red Local",
                 icon: "🏠",
-                description: "Define la red interna de tus usuarios y destinos que jamás deben pasar por el balanceo.",
+                description: "Indica por dónde entran tus clientes y qué red local no debe pasar por el balanceo.",
                 requirementTitle: "Requisito Indispensable #2: Exclusión de Tráfico Local (connected-networks)",
                 requirementText: "El tráfico entre dispositivos locales (LAN, impresoras, servidores, VLANs) y el acceso a los módems debe aceptarse antes de clasificar con PCC. Sin esto, perderás acceso a los módems y Winbox sufrirá caídas continuas.",
                 inputIds: [
@@ -36,30 +36,19 @@
                     "lan_interface_list",
                     "lan_address_list",
                     "lan_network",
-                    "extra_connected_networks",
-                    "hotspot_compatibility",
-                    "hotspot_interface"
+                    "extra_connected_networks"
                 ]
             },
             {
                 id: "algorithm",
                 step: 3,
-                title: "Modo de Balanceo y Failover",
-                shortTitle: "Balanceo",
+                title: "Failover, Hotspot y Repaso Final",
+                shortTitle: "Failover",
                 icon: "⚡",
-                description: "Selecciona el clasificador PCC, detección de caídas y protección contra bypass de FastTrack.",
-                requirementTitle: "Requisito Indispensable #3: FastTrack Bypass y Clasificador Adecuado",
-                requirementText: "FastTrack omite la tabla Mangle por defecto. El script agrega automáticamente una regla de exclusión para que el tráfico marcado sí se balancee. Usa 'Both Addresses and Ports' para navegación general y streaming, o 'Source Address' si tus clientes usan bancos o servicios con validación estricta de IP.",
-                inputIds: ["pcc_type", "recursive_routes"]
-            },
-            {
-                id: "verification",
-                step: 4,
-                title: "Requisitos & Checklist de Pre-vuelo",
-                shortTitle: "Checklist",
-                icon: "✅",
-                description: "Confirma los requisitos indispensables en tu MikroTik antes de aplicar el script generado.",
-                isChecklist: true,
+                description: "Elige cómo detectar la caída de una línea, si usas Hotspot, y repasa los requisitos antes de aplicar.",
+                requirementTitle: "Requisito Indispensable #3: FastTrack Bypass",
+                requirementText: "FastTrack omite la tabla Mangle por defecto. El script agrega automáticamente una regla de exclusión para que el tráfico marcado sí se balancee, sin tocar tus reglas FastTrack existentes.",
+                inputIds: ["recursive_routes", "hotspot_compatibility", "hotspot_interface", "pcc_type"],
                 checklistItems: [
                     {
                         id: "chk_default_route",
@@ -129,7 +118,8 @@
                 ],
                 default: "in-interface",
                 hint: "Método para identificar los paquetes que vienen de la LAN",
-                step: 2
+                step: 2,
+                advanced: true
             },
             { id: "lan_interface", label: "Interfaz LAN", type: "text", default: "bridge-lan", hint: "Red local cableada o bridge LAN", step: 2 },
             { id: "lan_interface_list", label: "Interface List LAN", type: "text", default: "LAN", hint: "Nombre de la Interface List en /interface list", step: 2 },
@@ -141,21 +131,34 @@
                 type: "textarea",
                 default: "",
                 hint: "VLAN, DMZ, VPN u otros prefijos internos, uno por línea o separados por coma. Si no se listan, el PCC puede enviar ese tráfico por una WAN.",
-                step: 2
+                step: 2,
+                advanced: true
+            },
+            {
+                id: "recursive_routes",
+                label: "Detección de caída de línea",
+                type: "select",
+                options: [
+                    { value: "no", label: "Normal: ping al gateway del ISP (check-gateway)" },
+                    { value: "yes", label: "Recursivo: ping a un host de Internet (8.8.8.8, 1.1.1.1)" }
+                ],
+                default: "no",
+                hint: "Normal detecta si el módem se cae. Recursivo también detecta cuando el módem responde pero no hay Internet.",
+                step: 3
             },
             {
                 id: "hotspot_compatibility",
-                label: "Compatibilidad con Hotspot (limitada)",
+                label: "¿Usas Hotspot en este router?",
                 type: "select",
                 options: [
-                    { value: "no", label: "No" },
+                    { value: "no", label: "No uso Hotspot" },
                     { value: "yes", label: "Sí: preservar portal e inicios de sesión" }
                 ],
                 default: "no",
-                hint: "MikroTik no considera PCC un método válido con Hotspot (web-proxy usa la tabla main). Esta opción excluye el portal y aplica PCC solo a clientes autenticados.",
-                step: 2
+                hint: "MikroTik no considera PCC un método válido con Hotspot (web-proxy usa la tabla main). Con 'Sí' se excluye el portal y el PCC se aplica solo a clientes autenticados.",
+                step: 3
             },
-            { id: "hotspot_interface", label: "Interfaz Hotspot", type: "text", default: "bridge-hotspot", hint: "Interfaz o bridge del portal. El PCC se aplica a clientes autenticados de esta interfaz.", step: 2 },
+            { id: "hotspot_interface", label: "Interfaz Hotspot", type: "text", default: "bridge-hotspot", hint: "Interfaz o bridge del portal. El PCC se aplica a clientes autenticados de esta interfaz.", step: 3 },
             {
                 id: "pcc_type",
                 label: "Clasificador PCC",
@@ -167,19 +170,8 @@
                 ],
                 default: "both-addresses-and-ports",
                 hint: "Fórmula de clasificación del tráfico. Both Addresses and Ports reparte más; Source Address mantiene cada cliente en la misma WAN.",
-                step: 3
-            },
-            {
-                id: "recursive_routes",
-                label: "Failover por Internet real (Rutas Recursivas)",
-                type: "select",
-                options: [
-                    { value: "no", label: "No (check-gateway al gateway directo)" },
-                    { value: "yes", label: "Sí (ping a host externo vía ruta recursiva)" }
-                ],
-                default: "no",
-                hint: "Si se habilita, cada WAN monitorea un host público externo. Detecta caídas de Internet aunque el gateway siga activo.",
-                step: 3
+                step: 3,
+                advanced: true
             }
         ]
     };

@@ -214,6 +214,8 @@ function initializeFormValues(scriptKey) {
 }
 
 function shouldShowInput(input, scriptKey, values) {
+    if (input.advanced && wizardMode) return false;
+
     if (scriptKey === 'pcc') {
         const matchType = values['pcc_lan_match_type'] || 'in-interface';
         if (input.id === 'lan_interface' && matchType !== 'in-interface') return false;
@@ -372,27 +374,44 @@ function renderDynamicWanFields(N, container) {
         wanFieldsContainer.appendChild(subheader);
 
         appendDynamicTextField(wanFieldsContainer, `wan${i}_interface`, `Interfaz WAN ${i}`, `ether${i}`);
-        appendDynamicTextField(wanFieldsContainer, `wan${i}_gateway`, `Gateway WAN ${i}`, `192.168.${i}.1`);
-        if (currentScript === 'pcc') {
+        appendDynamicTextField(
+            wanFieldsContainer,
+            `wan${i}_gateway`,
+            `Gateway WAN ${i}`,
+            `192.168.${i}.1`,
+            'IP del módem/ISP de esta línea. Cada WAN debe estar en una subred distinta.',
+            value => syncWanPrefix(i, value)
+        );
+        if (currentScript === 'pcc' && !wizardMode) {
             const storedGateway = formValues[`${currentScript}_wan${i}_gateway`] || `192.168.${i}.1`;
             appendDynamicTextField(
                 wanFieldsContainer,
                 `wan${i}_network`,
                 `Prefijo WAN ${i} (CIDR)`,
                 defaultWanPrefix(storedGateway),
-                'Usa la máscara real del ISP (/30, /29, /24). Vacío = no excluir esa subred. No se recalcula al cambiar el gateway.'
+                'Se calcula desde el gateway (/24). Edítalo si tu ISP entrega /30 o /29. Vacío = no excluir esa subred.',
+                () => { formValues[`${currentScript}_wan${i}_network_manual`] = true; }
             );
         }
 
         const recursiveWan = (currentScript === 'pcc' || currentScript === 'ecmp') && formValues[`${currentScript}_recursive_routes`] === 'yes';
-        if (currentScript === 'failover' || recursiveWan) {
+        if (currentScript === 'failover' || (recursiveWan && !wizardMode)) {
             appendDynamicTextField(wanFieldsContainer, `ping_host${i}`, `Host Monitoreo WAN ${i}`, hostDefaults[i - 1] || "8.8.8.8");
         }
     }
     container.appendChild(wanFieldsContainer);
 }
 
-function appendDynamicTextField(parent, id, label, defaultVal, hint) {
+function syncWanPrefix(index, gateway) {
+    if (currentScript !== 'pcc') return;
+    if (formValues[`${currentScript}_wan${index}_network_manual`]) return;
+    const prefix = defaultWanPrefix(gateway);
+    formValues[`${currentScript}_wan${index}_network`] = prefix;
+    const networkEl = document.getElementById(`wan${index}_network`);
+    if (networkEl) networkEl.value = prefix;
+}
+
+function appendDynamicTextField(parent, id, label, defaultVal, hint, onInput) {
     const stored = formValues[`${currentScript}_${id}`];
     const val = stored !== undefined ? stored : defaultVal;
 
@@ -409,6 +428,7 @@ function appendDynamicTextField(parent, id, label, defaultVal, hint) {
     input.value = val;
     input.addEventListener('input', () => {
         formValues[`${currentScript}_${id}`] = input.value;
+        if (onInput) onInput(input.value);
         updateScript();
     });
     parent.appendChild(group);
@@ -491,8 +511,20 @@ function renderWizard(def, container) {
         container.appendChild(reqCard);
     }
 
-    // Step Body: Checklist or Form Inputs
-    if (activeStep.isChecklist) {
+    // Step Body: Form Inputs + (opcional) Checklist de pre-vuelo
+    {
+        const stepInputs = def.inputs.filter(input => {
+            if (input.step !== undefined) return input.step === activeStep.step;
+            if (activeStep.inputIds) return activeStep.inputIds.includes(input.id);
+            return false;
+        });
+
+        stepInputs.forEach(input => {
+            if (shouldShowInput(input, currentScript, formValues)) {
+                renderInputElement(input, container, def);
+            }
+        });
+
         if (activeStep.checklistItems && activeStep.checklistItems.length) {
             const checklistContainer = document.createElement('div');
             checklistContainer.className = 'preflight-checklist';
@@ -583,19 +615,6 @@ function renderWizard(def, container) {
             });
             container.appendChild(verifContainer);
         }
-    } else {
-        // Form inputs for this step
-        const stepInputs = def.inputs.filter(input => {
-            if (input.step !== undefined) return input.step === activeStep.step;
-            if (activeStep.inputIds) return activeStep.inputIds.includes(input.id);
-            return false;
-        });
-
-        stepInputs.forEach(input => {
-            if (shouldShowInput(input, currentScript, formValues)) {
-                renderInputElement(input, container, def);
-            }
-        });
     }
 
     // Wizard Navigation Bar
