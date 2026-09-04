@@ -197,6 +197,16 @@ test('rechaza CIDR LAN inválido', () => {
     assertIncludes(script, 'red LAN');
 });
 
+test('rechaza un gateway con forma de IP inválida y acepta interfaces punto a punto', () => {
+    const invalido = generate(baseInputs({ wan1_gateway: '999.1.1.1' }), 'v7');
+    assertIncludes(invalido, '# ERROR:');
+    assertIncludes(invalido, 'gateway de WAN1');
+
+    const pppoe = generate(baseInputs({ wan1_gateway: 'pppoe-out1' }), 'v7');
+    assert.ok(!pppoe.includes('# ERROR:'), 'un nombre de interfaz debe seguir siendo válido');
+    assertIncludes(pppoe, 'gateway=pppoe-out1');
+});
+
 test('definición incluye 3 pasos de Wizard con requisitos indispensables y checklist', () => {
     const def = context.window.MTB.definition;
     assert.ok(Array.isArray(def.steps), 'def.steps debe ser un array');

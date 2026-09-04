@@ -193,6 +193,10 @@
         return /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,62}$/.test(String(value || '').trim());
     }
 
+    function looksLikeIpv4(value) {
+        return /^[\d.]+$/.test(String(value || '').trim());
+    }
+
     function parseExtraNetworks(value) {
         return String(value || '')
             .split(/[\s,;]+/)
@@ -284,7 +288,7 @@
             if (tableNames.has(table)) errors.push(`La tabla de enrutamiento ${table} quedaría duplicada.`);
             tableNames.add(table);
 
-            if (!isIpv4(gateway) && !isSafeName(gateway)) {
+            if (!isIpv4(gateway) && (looksLikeIpv4(gateway) || !isSafeName(gateway))) {
                 errors.push(`El gateway de WAN${i} debe ser una IPv4 o el nombre de una interfaz punto a punto.`);
             }
             if (gateway === '0.0.0.0') errors.push(`El gateway de WAN${i} no puede ser 0.0.0.0.`);
