@@ -197,4 +197,51 @@ test('rechaza CIDR LAN inválido', () => {
     assertIncludes(script, 'red LAN');
 });
 
+test('rechaza un gateway con forma de IP inválida y acepta interfaces punto a punto', () => {
+    const invalido = generate(baseInputs({ wan1_gateway: '999.1.1.1' }), 'v7');
+    assertIncludes(invalido, '# ERROR:');
+    assertIncludes(invalido, 'gateway de WAN1');
+
+    const pppoe = generate(baseInputs({ wan1_gateway: 'pppoe-out1' }), 'v7');
+    assert.ok(!pppoe.includes('# ERROR:'), 'un nombre de interfaz debe seguir siendo válido');
+    assertIncludes(pppoe, 'gateway=pppoe-out1');
+});
+
+test('definición incluye 3 pasos de Wizard con requisitos indispensables y checklist', () => {
+    const def = context.window.MTB.definition;
+    assert.ok(Array.isArray(def.steps), 'def.steps debe ser un array');
+    assert.equal(def.steps.length, 3, 'debe tener exactamente 3 pasos de Wizard');
+
+    const [s1, s2, s3] = def.steps;
+    assert.equal(s1.step, 1);
+    assert.ok(s1.requirementTitle.includes('Requisito Indispensable'));
+    assert.ok(s1.requirementText.includes('Add Default Route'));
+
+    assert.equal(s2.step, 2);
+    assert.ok(s2.requirementTitle.includes('Exclusión de Tráfico Local'));
+
+    assert.equal(s3.step, 3);
+    assert.ok(s3.requirementTitle.includes('FastTrack Bypass'));
+    assert.ok(s3.checklistItems.length >= 4, 'debe contener al menos 4 ítems de checklist');
+    assert.ok(s3.verificationCommands.length >= 3, 'debe contener comandos de verificación');
+});
+
+test('el asistente solo pide lo esencial y deja el resto en modo completo', () => {
+    const def = context.window.MTB.definition;
+    const byId = Object.fromEntries(def.inputs.map(input => [input.id, input]));
+
+    ['wan_count', 'lan_interface', 'lan_network', 'recursive_routes', 'hotspot_compatibility'].forEach(id => {
+        assert.ok(byId[id], `${id} debe existir`);
+        assert.ok(!byId[id].advanced, `${id} debe estar disponible en el asistente`);
+    });
+
+    ['lan_match_type', 'extra_connected_networks', 'pcc_type'].forEach(id => {
+        assert.equal(byId[id].advanced, true, `${id} debe quedar solo en modo completo`);
+    });
+
+    assert.equal(byId.recursive_routes.step, 3);
+    assert.equal(byId.hotspot_compatibility.step, 3);
+});
+
 console.log(`\n${passed} pruebas PCC OK`);
+
